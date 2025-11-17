@@ -4,13 +4,13 @@ Get SIAB running in 10 minutes! This guide shows the **fastest path** based on w
 
 ## I Have...
 
-### ✅ A Rocky Linux Machine Already
+### ✅ A Linux Machine Already (Rocky/Ubuntu/Xubuntu)
 
 **Fastest Method:** Direct installation (5 minutes)
 
 ```bash
-# SSH to your Rocky Linux machine
-ssh user@your-rocky-machine
+# SSH to your Linux machine (Rocky, Ubuntu, or Xubuntu)
+ssh user@your-linux-machine
 
 # Run one command
 curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | sudo bash
@@ -18,6 +18,8 @@ curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | s
 # Wait ~30 minutes for installation
 # Access at: https://dashboard.siab.local
 ```
+
+**Supported OS:** Rocky Linux 8.x/9.x, Ubuntu 20.04+, Xubuntu 20.04+
 
 **Works from:** Windows, macOS, or Linux workstation
 
@@ -59,9 +61,12 @@ SIAB-Provisioner.bat
 **Fastest Method:** VM Installation (15 minutes)
 
 **Step 1: Create VM**
-- Download Rocky Linux 9 ISO from https://rockylinux.org
+- Download an ISO:
+  - Rocky Linux 9: https://rockylinux.org
+  - Ubuntu 22.04 LTS: https://ubuntu.com/download/server
+  - Xubuntu 22.04 LTS: https://xubuntu.org/download
 - Create VM: 4 CPU, 16GB RAM, 100GB disk
-- Install Rocky Linux (minimal)
+- Install Linux (minimal/server installation)
 
 **Step 2: Install SIAB**
 ```bash
@@ -166,24 +171,34 @@ https://keycloak.siab.local
 
 ## Common Issues
 
-### "I don't have Rocky Linux"
+### "I don't have a supported Linux OS"
 
 **Solution 1:** Create a VM
 - Download VirtualBox (free)
-- Download Rocky Linux 9 ISO
+- Download Rocky Linux 9, Ubuntu 22.04, or Xubuntu 22.04 ISO
 - Create VM: 4 CPU, 16GB RAM, 100GB disk
 - Install, then run SIAB installer
 
 **Solution 2:** Use cloud
-- Launch Rocky Linux 9 instance on AWS/Azure/GCP
+- Launch Rocky Linux 9 or Ubuntu 22.04 instance on AWS/Azure/GCP
 - SSH in, run installer
 
-### "I have Ubuntu/Debian"
+### "I have Ubuntu/Xubuntu"
 
-SIAB requires Rocky Linux. Options:
-1. Create a Rocky Linux VM on your Ubuntu machine
-2. Use a cloud instance with Rocky Linux
-3. If you have bare metal, use our provisioning to install Rocky Linux
+Great! SIAB now supports Ubuntu and Xubuntu directly:
+```bash
+# Just run the installer on your Ubuntu/Xubuntu machine
+curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | sudo bash
+```
+
+**Supported versions:** Ubuntu 20.04+, Xubuntu 20.04+
+
+### "I have Debian"
+
+SIAB doesn't support Debian directly yet. Options:
+1. Create an Ubuntu VM on your Debian machine
+2. Use a cloud instance with Rocky Linux or Ubuntu
+3. If you have bare metal, use our provisioning to install Rocky Linux or Ubuntu
 
 ### "I'm on Windows/macOS"
 
@@ -229,13 +244,13 @@ kubectl get svc -n istio-system istio-ingress
 | Component | OS Required |
 |-----------|-------------|
 | **Your Laptop/Workstation** | Windows, macOS, or Linux |
-| **SIAB Installation** | Rocky Linux 8.x or 9.x |
+| **SIAB Installation** | Rocky Linux 8.x/9.x, Ubuntu 20.04+, or Xubuntu 20.04+ |
 | **PXE Provisioning Server** | Rocky Linux or Ubuntu |
 | **MAAS Provisioning Server** | Ubuntu 22.04 |
 | **GUI Provisioner** | Runs on Windows/macOS/Linux |
 | **Application Catalog** | Access from any OS browser |
 
-**Bottom line:** You can **control** SIAB from any OS, but it **runs on** Rocky Linux.
+**Bottom line:** You can **control** SIAB from any OS, and it **runs on** Rocky Linux, Ubuntu, or Xubuntu.
 
 ## Next Steps
 

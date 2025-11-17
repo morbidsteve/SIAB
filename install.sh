@@ -10,6 +10,43 @@ readonly SIAB_CONFIG_DIR="/etc/siab"
 readonly SIAB_LOG_DIR="/var/log/siab"
 readonly SIAB_BIN_DIR="/usr/local/bin"
 
+# Detect OS
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID="${ID}"
+        OS_VERSION_ID="${VERSION_ID}"
+        OS_NAME="${NAME}"
+    else
+        log_error "Cannot detect operating system"
+        exit 1
+    fi
+}
+
+# Run OS detection
+detect_os
+
+# Set OS-specific variables
+case "${OS_ID}" in
+    rocky|rhel|centos)
+        OS_FAMILY="rhel"
+        PKG_MANAGER="dnf"
+        FIREWALL_CMD="firewalld"
+        SECURITY_MODULE="selinux"
+        ;;
+    ubuntu|xubuntu|kubuntu|lubuntu)
+        OS_FAMILY="debian"
+        PKG_MANAGER="apt"
+        FIREWALL_CMD="ufw"
+        SECURITY_MODULE="apparmor"
+        ;;
+    *)
+        log_error "Unsupported operating system: ${OS_ID}"
+        log_error "Supported: Rocky Linux, Ubuntu, Xubuntu"
+        exit 1
+        ;;
+esac
+
 # Component versions (pinned for security)
 readonly RKE2_VERSION="${RKE2_VERSION:-v1.28.4+rke2r1}"
 readonly HELM_VERSION="${HELM_VERSION:-v3.13.3}"
@@ -68,10 +105,8 @@ check_requirements() {
     log_step "Checking system requirements..."
 
     # Check OS
-    if ! grep -q "Rocky Linux" /etc/os-release 2>/dev/null; then
-        log_error "This installer requires Rocky Linux"
-        exit 1
-    fi
+    log_info "Detected OS: ${OS_NAME} (${OS_ID} ${OS_VERSION_ID})"
+    log_info "OS Family: ${OS_FAMILY}"
 
     # Check CPU cores
     local cpu_cores
@@ -114,71 +149,150 @@ setup_directories() {
 install_dependencies() {
     log_step "Installing system dependencies..."
 
-    dnf update -y
-    dnf install -y \
-        curl \
-        wget \
-        tar \
-        git \
-        jq \
-        yq \
-        openssl \
-        policycoreutils-python-utils \
-        container-selinux \
-        iptables \
-        chrony \
-        audit
+    if [[ "${OS_FAMILY}" == "rhel" ]]; then
+        dnf update -y
+        dnf install -y \
+            curl \
+            wget \
+            tar \
+            git \
+            jq \
+            openssl \
+            policycoreutils-python-utils \
+            container-selinux \
+            iptables \
+            chrony \
+            audit
 
-    # Enable and start chrony for time sync
-    systemctl enable --now chronyd
+        # Enable and start chrony for time sync
+        systemctl enable --now chronyd
 
-    # Enable audit logging
-    systemctl enable --now auditd
+        # Enable audit logging
+        systemctl enable --now auditd
+
+    elif [[ "${OS_FAMILY}" == "debian" ]]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y
+        apt-get install -y \
+            curl \
+            wget \
+            tar \
+            git \
+            jq \
+            openssl \
+            iptables \
+            chrony \
+            auditd \
+            apparmor \
+            apparmor-utils
+
+        # Install yq separately (not in default repos)
+        wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        chmod +x /usr/local/bin/yq
+
+        # Enable and start chrony for time sync
+        systemctl enable --now chrony
+
+        # Enable audit logging
+        systemctl enable --now auditd
+    fi
+
+    log_info "System dependencies installed"
 }
 
 # Configure firewall
 configure_firewall() {
     log_step "Configuring firewall..."
 
-    # Install firewalld if not present
-    dnf install -y firewalld
-    systemctl enable --now firewalld
+    if [[ "${FIREWALL_CMD}" == "firewalld" ]]; then
+        # Install firewalld if not present
+        dnf install -y firewalld
+        systemctl enable --now firewalld
 
-    # RKE2 ports
-    firewall-cmd --permanent --add-port=6443/tcp   # Kubernetes API
-    firewall-cmd --permanent --add-port=9345/tcp   # RKE2 supervisor API
-    firewall-cmd --permanent --add-port=10250/tcp  # Kubelet metrics
-    firewall-cmd --permanent --add-port=2379/tcp   # etcd client
-    firewall-cmd --permanent --add-port=2380/tcp   # etcd peer
-    firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services
+        # RKE2 ports
+        firewall-cmd --permanent --add-port=6443/tcp   # Kubernetes API
+        firewall-cmd --permanent --add-port=9345/tcp   # RKE2 supervisor API
+        firewall-cmd --permanent --add-port=10250/tcp  # Kubelet metrics
+        firewall-cmd --permanent --add-port=2379/tcp   # etcd client
+        firewall-cmd --permanent --add-port=2380/tcp   # etcd peer
+        firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services
 
-    # Istio ports
-    firewall-cmd --permanent --add-port=15021/tcp  # Istio health check
-    firewall-cmd --permanent --add-port=443/tcp    # HTTPS ingress
-    firewall-cmd --permanent --add-port=80/tcp     # HTTP ingress (redirect to HTTPS)
+        # Istio ports
+        firewall-cmd --permanent --add-port=15021/tcp  # Istio health check
+        firewall-cmd --permanent --add-port=443/tcp    # HTTPS ingress
+        firewall-cmd --permanent --add-port=80/tcp     # HTTP ingress (redirect to HTTPS)
 
-    # CNI ports
-    firewall-cmd --permanent --add-port=8472/udp   # VXLAN
-    firewall-cmd --permanent --add-port=4789/udp   # VXLAN
+        # CNI ports
+        firewall-cmd --permanent --add-port=8472/udp   # VXLAN
+        firewall-cmd --permanent --add-port=4789/udp   # VXLAN
 
-    firewall-cmd --reload
+        firewall-cmd --reload
+
+    elif [[ "${FIREWALL_CMD}" == "ufw" ]]; then
+        # Install ufw if not present
+        apt-get install -y ufw
+
+        # Enable ufw (non-interactive)
+        ufw --force enable
+
+        # Allow SSH first (prevent lockout)
+        ufw allow 22/tcp
+
+        # RKE2 ports
+        ufw allow 6443/tcp    # Kubernetes API
+        ufw allow 9345/tcp    # RKE2 supervisor API
+        ufw allow 10250/tcp   # Kubelet metrics
+        ufw allow 2379/tcp    # etcd client
+        ufw allow 2380/tcp    # etcd peer
+        ufw allow 30000:32767/tcp  # NodePort Services
+
+        # Istio ports
+        ufw allow 15021/tcp   # Istio health check
+        ufw allow 443/tcp     # HTTPS ingress
+        ufw allow 80/tcp      # HTTP ingress (redirect to HTTPS)
+
+        # CNI ports
+        ufw allow 8472/udp    # VXLAN
+        ufw allow 4789/udp    # VXLAN
+
+        # Reload ufw
+        ufw reload
+    fi
+
     log_info "Firewall configured"
 }
 
-# Configure SELinux
-configure_selinux() {
-    log_step "Configuring SELinux..."
+# Configure security module (SELinux or AppArmor)
+configure_security() {
+    if [[ "${SECURITY_MODULE}" == "selinux" ]]; then
+        log_step "Configuring SELinux..."
 
-    # Ensure SELinux is enforcing
-    if [[ $(getenforce) != "Enforcing" ]]; then
-        setenforce 1
-        sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+        # Ensure SELinux is enforcing
+        if [[ $(getenforce) != "Enforcing" ]]; then
+            setenforce 1
+            sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+        fi
+
+        # Set SELinux booleans for containers
+        setsebool -P container_manage_cgroup on
+
+        log_info "SELinux configured in enforcing mode"
+
+    elif [[ "${SECURITY_MODULE}" == "apparmor" ]]; then
+        log_step "Configuring AppArmor..."
+
+        # Ensure AppArmor is enabled
+        systemctl enable --now apparmor
+
+        # Check AppArmor status
+        if ! aa-status >/dev/null 2>&1; then
+            log_warn "AppArmor not available, skipping..."
+        else
+            # Set AppArmor to enforcing mode
+            aa-enforce /etc/apparmor.d/* 2>/dev/null || true
+            log_info "AppArmor configured in enforcing mode"
+        fi
     fi
-
-    # Set SELinux booleans for containers
-    setsebool -P container_manage_cgroup on
-
-    log_info "SELinux configured in enforcing mode"
 }
 
 # Install RKE2
@@ -214,9 +328,16 @@ kubelet-arg:
   - "rotate-certificates=true"
   - "tls-cipher-suites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
 profile: "cis-1.23"
-selinux: true
+selinux: ${SECURITY_MODULE_ENABLED}
 secrets-encryption: true
 EOF
+
+    # Set the security module flag based on OS
+    if [[ "${SECURITY_MODULE}" == "selinux" ]]; then
+        sed -i "s/selinux: \${SECURITY_MODULE_ENABLED}/selinux: true/" /etc/rancher/rke2/config.yaml
+    else
+        sed -i "s/selinux: \${SECURITY_MODULE_ENABLED}/selinux: false/" /etc/rancher/rke2/config.yaml
+    fi
 
     # Create audit policy
     mkdir -p /var/log/kubernetes/audit
@@ -838,7 +959,7 @@ main() {
 
     install_dependencies
     configure_firewall
-    configure_selinux
+    configure_security
     install_rke2
     install_helm
     generate_credentials

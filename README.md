@@ -115,7 +115,12 @@ Browse and deploy apps like PostgreSQL, Redis, Grafana, NGINX, and more with a s
 
 ## Requirements
 
+**Supported Operating Systems:**
 - Rocky Linux 8.x or 9.x
+- Ubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
+- Xubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
+
+**Hardware Requirements:**
 - Minimum 4 CPU cores
 - Minimum 16GB RAM
 - Minimum 100GB disk space

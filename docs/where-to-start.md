@@ -10,9 +10,10 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 |------|---------|-------|-------|
 | GUI Provisioner | ✅ Yes | ✅ Yes | ✅ Yes |
 | Application Catalog (browse) | ✅ Yes | ✅ Yes | ✅ Yes |
-| Direct Installation | ❌ No* | ❌ No* | ⚠️ Rocky Linux only |
+| Direct Installation | ❌ No* | ❌ No* | ✅ Yes** |
 
-*You need Rocky Linux as the target system, but you can control provisioning from any OS.
+*You need Rocky Linux, Ubuntu, or Xubuntu as the target system, but you can control provisioning from any OS.
+**Linux direct installation works on Rocky Linux, Ubuntu 20.04+, and Xubuntu 20.04+
 
 ## Understanding the Components
 
@@ -39,7 +40,10 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 ### 3. Target Machines
 **Where SIAB actually runs**
 
-- Must run Rocky Linux 8.x or 9.x
+- Must run one of:
+  - Rocky Linux 8.x or 9.x
+  - Ubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
+  - Xubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
 - Can be:
   - Physical bare metal servers
   - VMs
@@ -47,14 +51,14 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 
 ## Deployment Scenarios
 
-### Scenario 1: I Have a Rocky Linux Machine Already
+### Scenario 1: I Have a Linux Machine Already
 
 **✅ Start From: Any OS (Windows, macOS, Linux)**
 
 **What You Need:**
 - Your workstation (any OS)
-- One or more Rocky Linux machines (physical or VM)
-- SSH access to the Rocky Linux machines
+- One or more Linux machines running Rocky Linux, Ubuntu, or Xubuntu (physical or VM)
+- SSH access to the Linux machines
 
 **Steps:**
 
@@ -62,10 +66,10 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 # 1. On YOUR workstation, clone the repo
 git clone https://github.com/morbidsteve/SIAB.git
 
-# 2. SSH to your Rocky Linux machine
-ssh user@rocky-machine
+# 2. SSH to your Linux machine
+ssh user@linux-machine
 
-# 3. On the Rocky Linux machine, run installer
+# 3. On the Linux machine, run installer
 curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | sudo bash
 
 # 4. From your workstation's browser, access the platform
@@ -74,7 +78,7 @@ open https://dashboard.siab.local
 
 **Requirements:**
 - ✅ Works from: **Windows, macOS, Linux**
-- Target: Rocky Linux 8.x or 9.x with 4 CPU, 16GB RAM, 100GB disk
+- Target: Rocky Linux 8.x/9.x, Ubuntu 20.04+, or Xubuntu 20.04+ with 4 CPU, 16GB RAM, 100GB disk
 
 ---
 
