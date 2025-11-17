@@ -1,0 +1,42 @@
+---
+# Example: Simple Web Application
+# This deploys a basic web application with security scanning and authentication
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: simple-web-app
+  namespace: default
+spec:
+  # Container image (must not be :latest)
+  image: nginx:1.25-alpine
+  replicas: 2
+  port: 80
+
+  # Resource allocation
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  # Security settings (all enabled by default)
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+
+  # Health checks
+  healthCheck:
+    enabled: true
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 30
+
+  # External access
+  ingress:
+    enabled: true
+    hostname: simple-app.siab.local
+    tls: true

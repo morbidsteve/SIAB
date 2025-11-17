@@ -1,0 +1,163 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: siabtenants.siab.io
+spec:
+  group: siab.io
+  names:
+    kind: SIABTenant
+    listKind: SIABTenantList
+    plural: siabtenants
+    singular: siabtenant
+    shortNames:
+      - tenant
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  description: Tenant name
+                  type: string
+                displayName:
+                  description: Human-readable tenant name
+                  type: string
+                description:
+                  description: Tenant description
+                  type: string
+                adminEmail:
+                  description: Admin email for the tenant
+                  type: string
+                  format: email
+                namespaces:
+                  description: Namespaces allocated to this tenant
+                  type: array
+                  items:
+                    type: string
+                resourceQuota:
+                  description: Resource quotas for the tenant
+                  type: object
+                  properties:
+                    cpu:
+                      description: Total CPU quota (e.g., "10")
+                      type: string
+                      default: "4"
+                    memory:
+                      description: Total memory quota (e.g., "20Gi")
+                      type: string
+                      default: "8Gi"
+                    storage:
+                      description: Total storage quota
+                      type: string
+                      default: "100Gi"
+                    pods:
+                      description: Maximum number of pods
+                      type: integer
+                      default: 50
+                    services:
+                      description: Maximum number of services
+                      type: integer
+                      default: 20
+                    secrets:
+                      description: Maximum number of secrets
+                      type: integer
+                      default: 50
+                    configmaps:
+                      description: Maximum number of configmaps
+                      type: integer
+                      default: 50
+                networkIsolation:
+                  description: Network isolation settings
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    allowCrossNamespace:
+                      type: boolean
+                      default: false
+                    allowedNamespaces:
+                      type: array
+                      items:
+                        type: string
+                iam:
+                  description: IAM configuration for the tenant
+                  type: object
+                  properties:
+                    keycloakRealm:
+                      description: Keycloak realm for this tenant
+                      type: string
+                    adminGroup:
+                      description: Keycloak admin group
+                      type: string
+                    userGroups:
+                      description: Keycloak user groups
+                      type: array
+                      items:
+                        type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Pending
+                    - Creating
+                    - Active
+                    - Suspended
+                    - Deleting
+                namespacesCreated:
+                  type: array
+                  items:
+                    type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Display Name
+          type: string
+          jsonPath: .spec.displayName
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: CPU Quota
+          type: string
+          jsonPath: .spec.resourceQuota.cpu
+        - name: Memory Quota
+          type: string
+          jsonPath: .spec.resourceQuota.memory
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

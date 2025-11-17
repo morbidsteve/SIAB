@@ -1,0 +1,57 @@
+---
+# Example: Application with MinIO Object Storage
+# This app has access to an S3-compatible bucket
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: data-processor
+  namespace: default
+spec:
+  image: myregistry/data-processor:v2.0.0
+  replicas: 2
+  port: 8080
+
+  env:
+    - name: WORKER_CONCURRENCY
+      value: "4"
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+
+  # MinIO object storage integration
+  # Automatically creates a bucket and injects credentials
+  objectStorage:
+    enabled: true
+    bucketName: "data-processor-bucket"
+    quotaSize: "50Gi"
+    injectCredentials: true
+    # Credentials will be injected as:
+    # - MINIO_ENDPOINT
+    # - MINIO_ACCESS_KEY
+    # - MINIO_SECRET_KEY
+    # - MINIO_BUCKET_NAME
+
+  # Persistent storage for temporary files
+  storage:
+    enabled: true
+    size: "20Gi"
+    mountPath: "/tmp/processing"
+
+  healthCheck:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 60
+
+  ingress:
+    enabled: true
+    hostname: processor.siab.local
+    tls: true

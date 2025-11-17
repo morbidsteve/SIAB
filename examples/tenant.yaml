@@ -1,0 +1,45 @@
+---
+# Example: Multi-tenant Configuration
+# Creates isolated tenant with resource quotas and IAM
+apiVersion: siab.io/v1alpha1
+kind: SIABTenant
+metadata:
+  name: acme-corp
+spec:
+  name: acme-corp
+  displayName: "ACME Corporation"
+  description: "Production tenant for ACME Corp applications"
+  adminEmail: admin@acme.com
+
+  # Namespaces for this tenant
+  namespaces:
+    - acme-production
+    - acme-staging
+    - acme-development
+
+  # Resource quotas per namespace
+  resourceQuota:
+    cpu: "20"
+    memory: "40Gi"
+    storage: "500Gi"
+    pods: 100
+    services: 50
+    secrets: 100
+    configmaps: 100
+
+  # Network isolation
+  networkIsolation:
+    enabled: true
+    allowCrossNamespace: false
+    allowedNamespaces:
+      - acme-production
+      - acme-staging
+
+  # Keycloak IAM integration
+  iam:
+    keycloakRealm: "acme"
+    adminGroup: "acme-admins"
+    userGroups:
+      - acme-developers
+      - acme-ops
+      - acme-viewers

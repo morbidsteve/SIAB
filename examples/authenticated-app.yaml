@@ -1,0 +1,108 @@
+---
+# Example: Application with Keycloak Authentication
+# This app requires users to be authenticated and have specific roles
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: secure-api
+  namespace: default
+spec:
+  image: myregistry/secure-api:v1.2.0
+  replicas: 3
+  port: 8080
+
+  # Environment variables
+  env:
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: api-secrets
+          key: database-url
+    - name: LOG_LEVEL
+      value: "info"
+    - name: APP_ENV
+      value: "production"
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+  # Security settings
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+    blockHighVulns: true
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+
+  # Keycloak authentication
+  auth:
+    enabled: true
+    requiredRoles:
+      - api-user
+      - api-read
+    publicPaths:
+      - /health
+      - /metrics
+      - /api/v1/public
+
+  # Persistent storage
+  storage:
+    enabled: true
+    size: "5Gi"
+    mountPath: "/app/data"
+    accessMode: ReadWriteOnce
+
+  # Network policies
+  networking:
+    allowInternetEgress: false
+    allowedEgressPorts:
+      - 5432  # PostgreSQL
+    allowIngressFrom:
+      - frontend-namespace
+
+  # Health checks
+  healthCheck:
+    enabled: true
+    path: /health
+    port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Auto-scaling
+  scaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+  # External access with rate limiting
+  ingress:
+    enabled: true
+    hostname: api.siab.local
+    tls: true
+    paths:
+      - /api/v1
+    rateLimit:
+      enabled: true
+      requestsPerSecond: 100
+      burstSize: 200
+    cors:
+      enabled: true
+      allowOrigins:
+        - "https://frontend.siab.local"
+      allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+      allowHeaders:
+        - Authorization
+        - Content-Type

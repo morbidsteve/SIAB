@@ -1,0 +1,407 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: siabapplications.siab.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+spec:
+  group: siab.io
+  names:
+    kind: SIABApplication
+    listKind: SIABApplicationList
+    plural: siabapplications
+    singular: siabapplication
+    shortNames:
+      - siabapp
+      - sa
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  description: Container image to deploy
+                  type: string
+                replicas:
+                  description: Number of replicas
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 1
+                port:
+                  description: Primary container port
+                  type: integer
+                  minimum: 1
+                  maximum: 65535
+                  default: 8080
+                env:
+                  description: Environment variables
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                      valueFrom:
+                        type: object
+                        properties:
+                          secretKeyRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              key:
+                                type: string
+                          configMapKeyRef:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                              key:
+                                type: string
+                resources:
+                  description: Resource requirements
+                  type: object
+                  properties:
+                    requests:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
+                          default: "100m"
+                        memory:
+                          type: string
+                          default: "128Mi"
+                    limits:
+                      type: object
+                      properties:
+                        cpu:
+                          type: string
+                          default: "500m"
+                        memory:
+                          type: string
+                          default: "512Mi"
+                security:
+                  description: Security configuration
+                  type: object
+                  properties:
+                    scanOnDeploy:
+                      description: Scan container for vulnerabilities before deployment
+                      type: boolean
+                      default: true
+                    blockCriticalVulns:
+                      description: Block deployment if critical vulnerabilities found
+                      type: boolean
+                      default: true
+                    blockHighVulns:
+                      description: Block deployment if high vulnerabilities found
+                      type: boolean
+                      default: false
+                    requireImageSigning:
+                      description: Require image to be signed
+                      type: boolean
+                      default: false
+                    runAsNonRoot:
+                      description: Run container as non-root user
+                      type: boolean
+                      default: true
+                    readOnlyRootFilesystem:
+                      description: Mount root filesystem as read-only
+                      type: boolean
+                      default: true
+                    allowPrivilegeEscalation:
+                      description: Allow privilege escalation
+                      type: boolean
+                      default: false
+                    seccompProfile:
+                      description: Seccomp profile to use
+                      type: string
+                      enum:
+                        - RuntimeDefault
+                        - Unconfined
+                      default: RuntimeDefault
+                auth:
+                  description: Authentication and authorization configuration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable authentication via Keycloak
+                      type: boolean
+                      default: false
+                    requiredRoles:
+                      description: Required Keycloak roles for access
+                      type: array
+                      items:
+                        type: string
+                    requiredGroups:
+                      description: Required Keycloak groups for access
+                      type: array
+                      items:
+                        type: string
+                    publicPaths:
+                      description: Paths that don't require authentication
+                      type: array
+                      items:
+                        type: string
+                storage:
+                  description: Storage configuration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable persistent storage
+                      type: boolean
+                      default: false
+                    size:
+                      description: Storage size (e.g., 10Gi)
+                      type: string
+                      default: "1Gi"
+                    storageClass:
+                      description: Storage class to use
+                      type: string
+                      default: "local-path"
+                    mountPath:
+                      description: Mount path in container
+                      type: string
+                      default: "/data"
+                    accessMode:
+                      description: Access mode for PVC
+                      type: string
+                      enum:
+                        - ReadWriteOnce
+                        - ReadWriteMany
+                        - ReadOnlyMany
+                      default: ReadWriteOnce
+                objectStorage:
+                  description: MinIO object storage integration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable MinIO bucket creation
+                      type: boolean
+                      default: false
+                    bucketName:
+                      description: Name of the bucket to create
+                      type: string
+                    quotaSize:
+                      description: Bucket quota size (e.g., 10Gi)
+                      type: string
+                      default: "10Gi"
+                    injectCredentials:
+                      description: Inject MinIO credentials as environment variables
+                      type: boolean
+                      default: true
+                ingress:
+                  description: Ingress/external access configuration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable external access via Istio
+                      type: boolean
+                      default: false
+                    hostname:
+                      description: Hostname for external access
+                      type: string
+                    tls:
+                      description: Enable TLS
+                      type: boolean
+                      default: true
+                    paths:
+                      description: URL paths to expose
+                      type: array
+                      items:
+                        type: string
+                      default:
+                        - "/"
+                    rateLimit:
+                      description: Rate limiting configuration
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        requestsPerSecond:
+                          type: integer
+                          default: 100
+                        burstSize:
+                          type: integer
+                          default: 200
+                    cors:
+                      description: CORS configuration
+                      type: object
+                      properties:
+                        enabled:
+                          type: boolean
+                          default: false
+                        allowOrigins:
+                          type: array
+                          items:
+                            type: string
+                        allowMethods:
+                          type: array
+                          items:
+                            type: string
+                        allowHeaders:
+                          type: array
+                          items:
+                            type: string
+                networking:
+                  description: Network policies
+                  type: object
+                  properties:
+                    allowInternetEgress:
+                      description: Allow outbound internet access
+                      type: boolean
+                      default: false
+                    allowedEgressPorts:
+                      description: Allowed egress ports
+                      type: array
+                      items:
+                        type: integer
+                    allowedEgressCIDRs:
+                      description: Allowed egress CIDRs
+                      type: array
+                      items:
+                        type: string
+                    allowIngressFrom:
+                      description: Namespaces allowed to access this app
+                      type: array
+                      items:
+                        type: string
+                healthCheck:
+                  description: Health check configuration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable health checks
+                      type: boolean
+                      default: true
+                    path:
+                      description: Health check path
+                      type: string
+                      default: "/health"
+                    port:
+                      description: Health check port
+                      type: integer
+                    initialDelaySeconds:
+                      description: Initial delay before health checks
+                      type: integer
+                      default: 30
+                    periodSeconds:
+                      description: Period between health checks
+                      type: integer
+                      default: 10
+                    timeoutSeconds:
+                      description: Timeout for health check
+                      type: integer
+                      default: 5
+                    failureThreshold:
+                      description: Failures before marking unhealthy
+                      type: integer
+                      default: 3
+                scaling:
+                  description: Auto-scaling configuration
+                  type: object
+                  properties:
+                    enabled:
+                      description: Enable horizontal pod autoscaling
+                      type: boolean
+                      default: false
+                    minReplicas:
+                      type: integer
+                      minimum: 1
+                      default: 1
+                    maxReplicas:
+                      type: integer
+                      default: 10
+                    targetCPUUtilization:
+                      type: integer
+                      default: 70
+                    targetMemoryUtilization:
+                      type: integer
+                      default: 80
+            status:
+              type: object
+              properties:
+                phase:
+                  description: Current phase of the application
+                  type: string
+                  enum:
+                    - Pending
+                    - Scanning
+                    - Deploying
+                    - Running
+                    - Failed
+                    - Blocked
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                availableReplicas:
+                  type: integer
+                vulnerabilitySummary:
+                  type: object
+                  properties:
+                    critical:
+                      type: integer
+                    high:
+                      type: integer
+                    medium:
+                      type: integer
+                    low:
+                      type: integer
+                    lastScanTime:
+                      type: string
+                      format: date-time
+                endpoints:
+                  type: object
+                  properties:
+                    internal:
+                      type: string
+                    external:
+                      type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Replicas
+          type: integer
+          jsonPath: .spec.replicas
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

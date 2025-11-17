@@ -1,0 +1,49 @@
+# Credentials and secrets
+*.pem
+*.key
+*.crt
+*.env.local
+credentials.env
+secrets/
+
+# Generated files
+generated/
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Build artifacts
+build/
+dist/
+*.tar.gz
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Node modules (if any web components)
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Helm
+*.tgz
+charts/*.tgz
