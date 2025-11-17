@@ -17,12 +17,21 @@ A one-command secure Kubernetes platform installer for Rocky Linux with RKE2. De
 - **Landing Dashboard**: Centralized portal for platform access
 
 ### Bare Metal Provisioning
+- **GUI Provisioner**: Cross-platform graphical interface (double-click to run!)
 - **MAAS Integration**: Enterprise-grade Metal as a Service support
 - **PXE Boot**: Lightweight network installation server
 - **Hardware Discovery**: Automatic detection of IPMI/BMC interfaces
 - **Kickstart Automation**: Unattended Rocky Linux installation
 - **Cloud-Init Support**: Post-installation configuration automation
 - **Cluster Deployment**: Multi-node cluster provisioning from bare metal
+
+### Application Catalog
+- **Web-Based Catalog**: Browse and deploy apps via beautiful web UI
+- **One-Click Deployment**: Deploy databases, monitoring, CI/CD tools with one click
+- **Pre-Configured Apps**: PostgreSQL, Redis, Prometheus, Grafana, NGINX, RabbitMQ, Vault, and more
+- **Security Integrated**: All apps include vulnerability scanning and security policies
+- **Organized Categories**: Databases, Monitoring, CI/CD, Messaging, Web Servers, Development, Security
+- **Deployment Tracking**: See what's deployed and manage from the UI
 
 ## Quick Start
 
@@ -45,6 +54,14 @@ sudo ./install.sh
 
 SIAB can automatically provision bare metal servers from scratch:
 
+**Using GUI (Easiest):**
+```bash
+cd SIAB/gui
+./SIAB-Provisioner.sh  # Linux/macOS
+# or
+SIAB-Provisioner.bat   # Windows
+```
+
 **Using MAAS (Enterprise):**
 ```bash
 # On Ubuntu server, set up MAAS provisioning
@@ -62,7 +79,21 @@ sudo ./provisioning/pxe/setup-pxe-server.sh
 # Boot target machines via PXE (they auto-install Rocky + SIAB)
 ```
 
-See [Bare Metal Provisioning Guide](./docs/bare-metal-provisioning.md) for details.
+See [Bare Metal Provisioning Guide](./docs/bare-metal-provisioning.md) and [GUI Guide](./docs/gui-provisioner.md) for details.
+
+### Option 3: Deploy Pre-Configured Applications
+
+After SIAB is installed, deploy popular applications with one click:
+
+```bash
+# Deploy application catalog
+kubectl apply -f catalog/catalog-deployment.yaml
+
+# Access web interface
+open https://catalog.siab.local
+```
+
+Browse and deploy apps like PostgreSQL, Redis, Grafana, NGINX, and more with a single click!
 
 ## Requirements
 
@@ -232,6 +263,8 @@ sudo ./uninstall.sh
 
 - [Getting Started](./docs/getting-started.md) - Installation and first deployment
 - [Bare Metal Provisioning](./docs/bare-metal-provisioning.md) - Deploy on unprovisioned hardware
+- [GUI Provisioner](./docs/gui-provisioner.md) - Using the graphical interface
+- [Application Catalog](./catalog/README.md) - One-click app deployment
 - [Configuration Guide](./docs/configuration.md) - Customize your installation
 - [Application Deployment](./docs/deployment.md) - Deploy apps with CRDs
 - [Security Guide](./docs/security.md) - Security architecture and best practices

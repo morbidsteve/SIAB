@@ -1,0 +1,56 @@
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: postgresql
+  namespace: default
+spec:
+  image: postgres:15.5-alpine
+  replicas: 1
+  port: 5432
+
+  env:
+    - name: POSTGRES_USER
+      value: "admin"
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-secret
+          key: password
+    - name: POSTGRES_DB
+      value: "mydb"
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+    runAsNonRoot: false  # postgres needs to run as postgres user
+    readOnlyRootFilesystem: false
+
+  storage:
+    enabled: true
+    size: "20Gi"
+    mountPath: "/var/lib/postgresql/data"
+    accessMode: ReadWriteOnce
+
+  healthCheck:
+    enabled: true
+    path: ""  # TCP check
+    port: 5432
+    initialDelaySeconds: 30
+    periodSeconds: 10
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: default
+type: Opaque
+stringData:
+  password: "changeme123"  # Change in production!

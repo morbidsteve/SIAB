@@ -1,0 +1,39 @@
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  image: prom/prometheus:v2.48.0
+  replicas: 1
+  port: 9090
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+
+  storage:
+    enabled: true
+    size: "50Gi"
+    mountPath: "/prometheus"
+
+  ingress:
+    enabled: true
+    hostname: prometheus.siab.local
+    tls: true
+    paths:
+      - "/"
+
+  auth:
+    enabled: true
+    requiredRoles:
+      - admin
+      - monitor-viewer

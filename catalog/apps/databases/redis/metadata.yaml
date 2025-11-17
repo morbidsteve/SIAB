@@ -1,0 +1,13 @@
+id: redis
+name: Redis
+version: 7.2
+category: databases
+icon: 🔴
+description: High-performance in-memory data store for caching, session management, and real-time analytics.
+tags:
+  - cache
+  - nosql
+  - key-value
+  - in-memory
+maintainer: SIAB Team
+documentation: https://redis.io/docs/

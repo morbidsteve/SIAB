@@ -1,0 +1,51 @@
+apiVersion: siab.io/v1alpha1
+kind: SIABApplication
+metadata:
+  name: rabbitmq
+  namespace: default
+spec:
+  image: rabbitmq:3.12-management-alpine
+  replicas: 1
+  port: 5672
+
+  env:
+    - name: RABBITMQ_DEFAULT_USER
+      value: "admin"
+    - name: RABBITMQ_DEFAULT_PASS
+      valueFrom:
+        secretKeyRef:
+          name: rabbitmq-secret
+          key: password
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+
+  security:
+    scanOnDeploy: true
+    blockCriticalVulns: true
+
+  storage:
+    enabled: true
+    size: "10Gi"
+    mountPath: "/var/lib/rabbitmq"
+
+  ingress:
+    enabled: true
+    hostname: rabbitmq.siab.local
+    tls: true
+    paths:
+      - "/"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rabbitmq-secret
+  namespace: default
+type: Opaque
+stringData:
+  password: "changeme123"  # Change in production!

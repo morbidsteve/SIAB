@@ -1,0 +1,13 @@
+id: prometheus
+name: Prometheus
+version: 2.48
+category: monitoring
+icon: 🔥
+description: Leading open-source monitoring and alerting toolkit with powerful query language and time-series database.
+tags:
+  - monitoring
+  - metrics
+  - alerting
+  - time-series
+maintainer: SIAB Team
+documentation: https://prometheus.io/docs/

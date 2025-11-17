@@ -1,0 +1,13 @@
+id: vault
+name: HashiCorp Vault
+version: 1.15
+category: security
+icon: 🔐
+description: Secure secrets management, encryption as a service, and privileged access management solution.
+tags:
+  - secrets
+  - encryption
+  - security
+  - hashicorp
+maintainer: SIAB Team
+documentation: https://www.vaultproject.io/docs
