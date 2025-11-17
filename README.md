@@ -4,7 +4,9 @@ A one-command secure Kubernetes platform installer for Rocky Linux with RKE2. De
 
 ## Features
 
+### Platform Capabilities
 - **One-Command Install**: Deploy entire platform with a single command
+- **Bare Metal Provisioning**: Automated OS installation and SIAB deployment on unprovisioned hardware
 - **RKE2 Hardened Kubernetes**: FIPS-compliant, CIS hardened Kubernetes distribution
 - **Keycloak IAM**: Enterprise identity and access management with OIDC/SAML
 - **Istio Service Mesh**: mTLS, traffic management, ingress/egress control
@@ -14,7 +16,17 @@ A one-command secure Kubernetes platform installer for Rocky Linux with RKE2. De
 - **Custom Resource Definitions**: Easy application deployment with `SIABApplication` CRD
 - **Landing Dashboard**: Centralized portal for platform access
 
+### Bare Metal Provisioning
+- **MAAS Integration**: Enterprise-grade Metal as a Service support
+- **PXE Boot**: Lightweight network installation server
+- **Hardware Discovery**: Automatic detection of IPMI/BMC interfaces
+- **Kickstart Automation**: Unattended Rocky Linux installation
+- **Cloud-Init Support**: Post-installation configuration automation
+- **Cluster Deployment**: Multi-node cluster provisioning from bare metal
+
 ## Quick Start
+
+### Option 1: Install on Existing Rocky Linux
 
 ```bash
 # One-command install
@@ -28,6 +40,29 @@ git clone https://github.com/morbidsteve/SIAB.git
 cd SIAB
 sudo ./install.sh
 ```
+
+### Option 2: Deploy on Bare Metal (Unprovisioned Hardware)
+
+SIAB can automatically provision bare metal servers from scratch:
+
+**Using MAAS (Enterprise):**
+```bash
+# On Ubuntu server, set up MAAS provisioning
+sudo ./provisioning/maas/setup-maas.sh
+
+# Deploy 3-node cluster
+./provisioning/scripts/provision-cluster.sh --method maas --nodes 3
+```
+
+**Using PXE (Lightweight):**
+```bash
+# On Rocky Linux server, set up PXE server
+sudo ./provisioning/pxe/setup-pxe-server.sh
+
+# Boot target machines via PXE (they auto-install Rocky + SIAB)
+```
+
+See [Bare Metal Provisioning Guide](./docs/bare-metal-provisioning.md) for details.
 
 ## Requirements
 
@@ -192,6 +227,37 @@ helm install myapp siab/application \
 ```bash
 sudo ./uninstall.sh
 ```
+
+## Documentation
+
+- [Getting Started](./docs/getting-started.md) - Installation and first deployment
+- [Bare Metal Provisioning](./docs/bare-metal-provisioning.md) - Deploy on unprovisioned hardware
+- [Configuration Guide](./docs/configuration.md) - Customize your installation
+- [Application Deployment](./docs/deployment.md) - Deploy apps with CRDs
+- [Security Guide](./docs/security.md) - Security architecture and best practices
+
+## Use Cases
+
+### Datacenter Deployment
+Deploy SIAB across your datacenter using MAAS:
+1. Set up MAAS server
+2. Add bare metal servers via IPMI
+3. Deploy multi-node Kubernetes cluster
+4. Automatic OS installation and SIAB setup
+
+### Edge Computing
+Deploy secure Kubernetes at edge locations:
+1. Ship preconfigured hardware
+2. PXE boot from central server
+3. Zero-touch provisioning
+4. Automatic security hardening
+
+### Development Clusters
+Quickly provision dev/test environments:
+1. Point at available hardware
+2. Automated Rocky Linux installation
+3. SIAB platform ready in 30 minutes
+4. Tear down and rebuild easily
 
 ## Support
 

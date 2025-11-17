@@ -1,0 +1,187 @@
+#cloud-config
+# SIAB Cloud-Init Configuration
+# Use this for cloud providers or MAAS deployments
+
+# Set hostname
+hostname: siab-node
+
+# Update packages
+package_update: true
+package_upgrade: true
+
+# Install required packages
+packages:
+  - curl
+  - wget
+  - git
+  - tar
+  - openssl
+  - net-tools
+  - bind-utils
+  - policycoreutils-python-utils
+  - container-selinux
+  - iptables
+  - chrony
+  - audit
+  - firewalld
+  - yum-utils
+  - device-mapper-persistent-data
+  - lvm2
+  - vim
+  - tmux
+  - htop
+  - jq
+
+# Create users (optional)
+users:
+  - name: siab-admin
+    groups: wheel
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3... your-ssh-key-here
+
+# Write configuration files
+write_files:
+  - path: /etc/siab/cluster-config
+    content: |
+      # SIAB Cluster Configuration
+      CLUSTER_NAME=siab-cluster
+      NODE_ROLE=master
+      PROVISIONED_BY=cloud-init
+    permissions: '0644'
+    owner: root:root
+
+  - path: /etc/systemd/system/siab-autoinstall.service
+    content: |
+      [Unit]
+      Description=SIAB Automated Installation
+      After=network-online.target cloud-final.service
+      Wants=network-online.target
+      ConditionPathExists=!/etc/siab/installed
+
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/siab/install.sh
+      ExecStartPost=/usr/bin/touch /etc/siab/installed
+      StandardOutput=journal+console
+      StandardError=journal+console
+      RemainAfterExit=yes
+      TimeoutStartSec=3600
+
+      [Install]
+      WantedBy=multi-user.target
+    permissions: '0644'
+    owner: root:root
+
+  - path: /etc/sysctl.d/99-kubernetes.conf
+    content: |
+      # Kubernetes requirements
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+      net.ipv6.conf.all.forwarding = 1
+
+      # Security hardening
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.conf.default.send_redirects = 0
+      net.ipv4.conf.all.accept_source_route = 0
+      net.ipv4.conf.default.accept_source_route = 0
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.default.accept_redirects = 0
+      net.ipv4.conf.all.secure_redirects = 0
+      net.ipv4.conf.default.secure_redirects = 0
+      net.ipv4.conf.all.log_martians = 1
+      net.ipv4.conf.default.log_martians = 1
+      net.ipv4.icmp_echo_ignore_broadcasts = 1
+      net.ipv4.icmp_ignore_bogus_error_responses = 1
+      net.ipv4.tcp_syncookies = 1
+
+      # Performance tuning
+      vm.swappiness = 0
+      fs.file-max = 2097152
+    permissions: '0644'
+    owner: root:root
+
+  - path: /etc/modules-load.d/kubernetes.conf
+    content: |
+      overlay
+      br_netfilter
+    permissions: '0644'
+    owner: root:root
+
+# Run commands
+runcmd:
+  # Disable swap
+  - swapoff -a
+  - sed -i '/ swap / s/^/#/' /etc/fstab
+
+  # Load kernel modules
+  - modprobe overlay
+  - modprobe br_netfilter
+
+  # Apply sysctl params
+  - sysctl --system
+
+  # Configure SELinux
+  - setenforce 1
+  - sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+
+  # Enable services
+  - systemctl enable --now chronyd
+  - systemctl enable --now auditd
+  - systemctl enable --now firewalld
+
+  # Create SIAB directories
+  - mkdir -p /opt/siab
+  - mkdir -p /etc/siab
+  - mkdir -p /var/log/siab
+  - mkdir -p /var/lib/rancher
+
+  # Download SIAB installer
+  - curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh -o /opt/siab/install.sh
+  - chmod +x /opt/siab/install.sh
+
+  # Enable SIAB auto-install
+  - systemctl daemon-reload
+  - systemctl enable siab-autoinstall.service
+
+  # Create node info
+  - |
+    cat > /etc/siab/node-info.json <<EOF
+    {
+      "hostname": "$(hostname)",
+      "ip_address": "$(hostname -I | awk '{print $1}')",
+      "provisioned_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+      "provisioned_by": "cloud-init"
+    }
+    EOF
+
+# Set timezone
+timezone: UTC
+
+# Configure NTP
+ntp:
+  enabled: true
+  servers:
+    - 0.pool.ntp.org
+    - 1.pool.ntp.org
+    - 2.pool.ntp.org
+    - 3.pool.ntp.org
+
+# Power state (reboot after cloud-init)
+power_state:
+  mode: reboot
+  delay: now
+  message: Rebooting after cloud-init
+  condition: True
+
+# Final message
+final_message: |
+  SIAB node provisioning complete!
+  System is ready for SIAB installation.
+  SIAB will be automatically installed on next boot.
+
+  Access via: ssh siab-admin@$(hostname -I | awk '{print $1}')
+
+  Monitor installation: journalctl -u siab-autoinstall -f
