@@ -2,6 +2,22 @@
 
 A one-command secure Kubernetes platform installer for Rocky Linux with RKE2. Deploy a production-ready, security-hardened Kubernetes environment with integrated IAM, storage, service mesh, container scanning, and policy enforcement.
 
+## 🚀 New to SIAB? Start Here!
+
+**Not sure which OS you need or where to begin?**
+
+→ **[📖 Where Can I Start From? (Windows/Mac/Linux Guide)](./docs/where-to-start.md)** ←
+
+This guide explains:
+- ✅ What you can do from Windows, macOS, or Linux
+- ✅ Which parts require which operating systems
+- ✅ Common deployment scenarios with examples
+- ✅ Quick start decision tree
+
+**TL;DR:** You can **control** SIAB from **any OS** (Windows/Mac/Linux), but it **runs on** Rocky Linux.
+
+**[⚡ Quick Start Guide](./QUICK-START.md)** - Get running in 10 minutes!
+
 ## Features
 
 ### Platform Capabilities
@@ -78,6 +94,8 @@ sudo ./provisioning/pxe/setup-pxe-server.sh
 
 # Boot target machines via PXE (they auto-install Rocky + SIAB)
 ```
+
+**📋 [See detailed OS requirements and scenarios](./docs/where-to-start.md)**
 
 See [Bare Metal Provisioning Guide](./docs/bare-metal-provisioning.md) and [GUI Guide](./docs/gui-provisioner.md) for details.
 
