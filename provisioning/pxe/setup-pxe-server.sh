@@ -6,7 +6,15 @@ set -euo pipefail
 
 readonly PXE_ROOT="/var/lib/tftpboot"
 readonly HTTP_ROOT="/var/www/html/siab-provision"
+
+# OS versions
 readonly ROCKY_VERSION="${ROCKY_VERSION:-9.3}"
+readonly UBUNTU_VERSION="${UBUNTU_VERSION:-22.04}"
+readonly ORACLE_VERSION="${ORACLE_VERSION:-9}"
+readonly ALMA_VERSION="${ALMA_VERSION:-9}"
+
+# Which OSes to setup (comma-separated): rocky,ubuntu,oracle,alma
+readonly SETUP_OSES="${SETUP_OSES:-rocky,ubuntu}"
 
 # Colors
 readonly GREEN='\033[0;32m'
@@ -116,10 +124,35 @@ EOF
     log_info "TFTP server configured"
 }
 
+download_ubuntu_images() {
+    log_info "Downloading Ubuntu ${UBUNTU_VERSION} boot images..."
+
+    mkdir -p "${HTTP_ROOT}/ubuntu${UBUNTU_VERSION}"
+    mkdir -p "${PXE_ROOT}/ubuntu${UBUNTU_VERSION}"
+    cd "${HTTP_ROOT}/ubuntu${UBUNTU_VERSION}"
+
+    # Download netboot installer
+    local netboot_url="http://archive.ubuntu.com/ubuntu/dists/jammy/main/installer-amd64/current/legacy-images/netboot/netboot.tar.gz"
+    local netboot_file="netboot.tar.gz"
+
+    if [[ ! -f "${netboot_file}" ]]; then
+        log_info "Downloading Ubuntu netboot installer..."
+        wget -c "${netboot_url}" -O "${netboot_file}"
+    fi
+
+    # Extract netboot files
+    tar -xzf "${netboot_file}"
+    cp ubuntu-installer/amd64/linux "${PXE_ROOT}/ubuntu${UBUNTU_VERSION}/vmlinuz"
+    cp ubuntu-installer/amd64/initrd.gz "${PXE_ROOT}/ubuntu${UBUNTU_VERSION}/initrd.gz"
+
+    log_info "Ubuntu images downloaded and extracted"
+}
+
 download_rocky_images() {
     log_info "Downloading Rocky Linux ${ROCKY_VERSION} boot images..."
 
     mkdir -p "${HTTP_ROOT}/rocky${ROCKY_VERSION}"
+    mkdir -p "${PXE_ROOT}/rocky${ROCKY_VERSION}"
     cd "${HTTP_ROOT}/rocky${ROCKY_VERSION}"
 
     # Download minimal ISO
@@ -148,19 +181,129 @@ download_rocky_images() {
     log_info "Rocky Linux images downloaded and extracted"
 }
 
+download_oracle_images() {
+    log_info "Downloading Oracle Linux ${ORACLE_VERSION} boot images..."
+
+    mkdir -p "${HTTP_ROOT}/oracle${ORACLE_VERSION}"
+    mkdir -p "${PXE_ROOT}/oracle${ORACLE_VERSION}"
+    cd "${HTTP_ROOT}/oracle${ORACLE_VERSION}"
+
+    # Download boot ISO
+    local iso_url="https://yum.oracle.com/ISOS/OracleLinux/OL${ORACLE_VERSION}/u0/x86_64/OracleLinux-R${ORACLE_VERSION}-U0-x86_64-boot.iso"
+    local iso_file="OracleLinux-R${ORACLE_VERSION}-U0-x86_64-boot.iso"
+
+    if [[ ! -f "${iso_file}" ]]; then
+        log_info "Downloading Oracle Linux ISO..."
+        wget -c "${iso_url}" -O "${iso_file}"
+    fi
+
+    # Extract boot images
+    mkdir -p /tmp/oracle-mount
+    mount -o loop "${iso_file}" /tmp/oracle-mount
+
+    cp /tmp/oracle-mount/images/pxeboot/vmlinuz "${PXE_ROOT}/oracle${ORACLE_VERSION}/"
+    cp /tmp/oracle-mount/images/pxeboot/initrd.img "${PXE_ROOT}/oracle${ORACLE_VERSION}/"
+
+    rsync -av /tmp/oracle-mount/ "${HTTP_ROOT}/oracle${ORACLE_VERSION}/"
+
+    umount /tmp/oracle-mount
+    rmdir /tmp/oracle-mount
+
+    log_info "Oracle Linux images downloaded and extracted"
+}
+
+download_alma_images() {
+    log_info "Downloading AlmaLinux ${ALMA_VERSION} boot images..."
+
+    mkdir -p "${HTTP_ROOT}/alma${ALMA_VERSION}"
+    mkdir -p "${PXE_ROOT}/alma${ALMA_VERSION}"
+    cd "${HTTP_ROOT}/alma${ALMA_VERSION}"
+
+    # Download minimal ISO
+    local iso_url="https://repo.almalinux.org/almalinux/${ALMA_VERSION}/isos/x86_64/AlmaLinux-${ALMA_VERSION}-x86_64-minimal.iso"
+    local iso_file="AlmaLinux-${ALMA_VERSION}-x86_64-minimal.iso"
+
+    if [[ ! -f "${iso_file}" ]]; then
+        log_info "Downloading AlmaLinux ISO..."
+        wget -c "${iso_url}" -O "${iso_file}"
+    fi
+
+    # Extract boot images
+    mkdir -p /tmp/alma-mount
+    mount -o loop "${iso_file}" /tmp/alma-mount
+
+    cp /tmp/alma-mount/images/pxeboot/vmlinuz "${PXE_ROOT}/alma${ALMA_VERSION}/"
+    cp /tmp/alma-mount/images/pxeboot/initrd.img "${PXE_ROOT}/alma${ALMA_VERSION}/"
+
+    rsync -av /tmp/alma-mount/ "${HTTP_ROOT}/alma${ALMA_VERSION}/"
+
+    umount /tmp/alma-mount
+    rmdir /tmp/alma-mount
+
+    log_info "AlmaLinux images downloaded and extracted"
+}
+
+download_os_images() {
+    log_info "Downloading OS images: ${SETUP_OSES}"
+
+    IFS=',' read -ra OSES <<< "$SETUP_OSES"
+    for os in "${OSES[@]}"; do
+        case "$os" in
+            ubuntu)
+                download_ubuntu_images
+                ;;
+            rocky)
+                download_rocky_images
+                ;;
+            oracle)
+                download_oracle_images
+                ;;
+            alma)
+                download_alma_images
+                ;;
+            *)
+                log_warn "Unknown OS: $os, skipping..."
+                ;;
+        esac
+    done
+}
+
 create_pxe_menu() {
     log_info "Creating PXE boot menu..."
 
     local server_ip
     server_ip=$(hostname -I | awk '{print $1}')
 
+    # Start menu with header
     cat > "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
 DEFAULT menu.c32
 PROMPT 0
 TIMEOUT 300
 ONTIMEOUT rocky-siab
 
-MENU TITLE SIAB PXE Boot Menu
+MENU TITLE SIAB PXE Boot Menu - Multi-OS Support
+EOF
+
+    # Add menu entries for each configured OS
+    IFS=',' read -ra OSES <<< "$SETUP_OSES"
+    for os in "${OSES[@]}"; do
+        case "$os" in
+            ubuntu)
+                cat >> "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
+
+LABEL ubuntu-siab
+    MENU LABEL Install Ubuntu ${UBUNTU_VERSION} with SIAB
+    KERNEL ubuntu${UBUNTU_VERSION}/vmlinuz
+    APPEND initrd=ubuntu${UBUNTU_VERSION}/initrd.gz auto=true url=http://${server_ip}/siab-provision/preseed/ubuntu-siab.cfg netcfg/choose_interface=auto
+
+LABEL ubuntu-manual
+    MENU LABEL Install Ubuntu ${UBUNTU_VERSION} (Manual)
+    KERNEL ubuntu${UBUNTU_VERSION}/vmlinuz
+    APPEND initrd=ubuntu${UBUNTU_VERSION}/initrd.gz
+EOF
+                ;;
+            rocky)
+                cat >> "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
 
 LABEL rocky-siab
     MENU LABEL Install Rocky Linux ${ROCKY_VERSION} with SIAB
@@ -171,13 +314,48 @@ LABEL rocky-manual
     MENU LABEL Install Rocky Linux ${ROCKY_VERSION} (Manual)
     KERNEL rocky${ROCKY_VERSION}/vmlinuz
     APPEND initrd=rocky${ROCKY_VERSION}/initrd.img inst.repo=http://${server_ip}/siab-provision/rocky${ROCKY_VERSION} ip=dhcp
+EOF
+                ;;
+            oracle)
+                cat >> "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
+
+LABEL oracle-siab
+    MENU LABEL Install Oracle Linux ${ORACLE_VERSION} with SIAB
+    KERNEL oracle${ORACLE_VERSION}/vmlinuz
+    APPEND initrd=oracle${ORACLE_VERSION}/initrd.img inst.repo=http://${server_ip}/siab-provision/oracle${ORACLE_VERSION} inst.ks=http://${server_ip}/siab-provision/kickstart/siab-oracle${ORACLE_VERSION}.ks ip=dhcp
+
+LABEL oracle-manual
+    MENU LABEL Install Oracle Linux ${ORACLE_VERSION} (Manual)
+    KERNEL oracle${ORACLE_VERSION}/vmlinuz
+    APPEND initrd=oracle${ORACLE_VERSION}/initrd.img inst.repo=http://${server_ip}/siab-provision/oracle${ORACLE_VERSION} ip=dhcp
+EOF
+                ;;
+            alma)
+                cat >> "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
+
+LABEL alma-siab
+    MENU LABEL Install AlmaLinux ${ALMA_VERSION} with SIAB
+    KERNEL alma${ALMA_VERSION}/vmlinuz
+    APPEND initrd=alma${ALMA_VERSION}/initrd.img inst.repo=http://${server_ip}/siab-provision/alma${ALMA_VERSION} inst.ks=http://${server_ip}/siab-provision/kickstart/siab-alma${ALMA_VERSION}.ks ip=dhcp
+
+LABEL alma-manual
+    MENU LABEL Install AlmaLinux ${ALMA_VERSION} (Manual)
+    KERNEL alma${ALMA_VERSION}/vmlinuz
+    APPEND initrd=alma${ALMA_VERSION}/initrd.img inst.repo=http://${server_ip}/siab-provision/alma${ALMA_VERSION} ip=dhcp
+EOF
+                ;;
+        esac
+    done
+
+    # Add common footer
+    cat >> "${PXE_ROOT}/pxelinux.cfg/default" <<EOF
 
 LABEL local
     MENU LABEL Boot from local disk
     LOCALBOOT 0
 EOF
 
-    log_info "PXE boot menu created"
+    log_info "PXE boot menu created with: ${SETUP_OSES}"
 }
 
 setup_http() {
@@ -385,7 +563,7 @@ main() {
     detect_os
     install_dependencies
     setup_tftp
-    download_rocky_images
+    download_os_images
     create_pxe_menu
     setup_http
     setup_dhcp

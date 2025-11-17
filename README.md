@@ -116,9 +116,18 @@ Browse and deploy apps like PostgreSQL, Redis, Grafana, NGINX, and more with a s
 ## Requirements
 
 **Supported Operating Systems:**
+
+RHEL-based:
 - Rocky Linux 8.x or 9.x
+- Oracle Linux 8.x or 9.x
+- AlmaLinux 8.x or 9.x
+- RHEL 8.x or 9.x
+- CentOS 8.x or 9.x (Stream)
+
+Debian-based:
 - Ubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
 - Xubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
+- Debian 11 (Bullseye) or 12 (Bookworm)
 
 **Hardware Requirements:**
 - Minimum 4 CPU cores

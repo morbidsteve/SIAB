@@ -12,8 +12,8 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 | Application Catalog (browse) | ✅ Yes | ✅ Yes | ✅ Yes |
 | Direct Installation | ❌ No* | ❌ No* | ✅ Yes** |
 
-*You need Rocky Linux, Ubuntu, or Xubuntu as the target system, but you can control provisioning from any OS.
-**Linux direct installation works on Rocky Linux, Ubuntu 20.04+, and Xubuntu 20.04+
+*You need a supported enterprise Linux distribution as the target system, but you can control provisioning from any OS.
+**Direct installation works on RHEL family (Rocky, Oracle, Alma, RHEL, CentOS) and Debian family (Ubuntu, Xubuntu, Debian)
 
 ## Understanding the Components
 
@@ -41,9 +41,8 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 **Where SIAB actually runs**
 
 - Must run one of:
-  - Rocky Linux 8.x or 9.x
-  - Ubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
-  - Xubuntu 20.04 LTS, 22.04 LTS, or 24.04 LTS
+  - **RHEL family:** Rocky Linux, Oracle Linux, AlmaLinux, RHEL, CentOS Stream (8.x or 9.x)
+  - **Debian family:** Ubuntu, Xubuntu, Debian (20.04+/11+)
 - Can be:
   - Physical bare metal servers
   - VMs
@@ -57,7 +56,7 @@ This guide explains **what you need** and **where to run** SIAB tools based on y
 
 **What You Need:**
 - Your workstation (any OS)
-- One or more Linux machines running Rocky Linux, Ubuntu, or Xubuntu (physical or VM)
+- One or more Linux machines running a supported distribution (physical or VM)
 - SSH access to the Linux machines
 
 **Steps:**
@@ -78,7 +77,7 @@ open https://dashboard.siab.local
 
 **Requirements:**
 - ✅ Works from: **Windows, macOS, Linux**
-- Target: Rocky Linux 8.x/9.x, Ubuntu 20.04+, or Xubuntu 20.04+ with 4 CPU, 16GB RAM, 100GB disk
+- Target: Any supported Linux distribution (RHEL/Debian family) with 4 CPU, 16GB RAM, 100GB disk
 
 ---
 

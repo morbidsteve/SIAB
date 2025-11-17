@@ -28,13 +28,15 @@ detect_os
 
 # Set OS-specific variables
 case "${OS_ID}" in
-    rocky|rhel|centos)
+    rocky|rhel|centos|ol|almalinux)
+        # RHEL family: Rocky, RHEL, CentOS, Oracle Linux, AlmaLinux
         OS_FAMILY="rhel"
         PKG_MANAGER="dnf"
         FIREWALL_CMD="firewalld"
         SECURITY_MODULE="selinux"
         ;;
-    ubuntu|xubuntu|kubuntu|lubuntu)
+    ubuntu|xubuntu|kubuntu|lubuntu|debian)
+        # Debian family: Ubuntu variants and Debian
         OS_FAMILY="debian"
         PKG_MANAGER="apt"
         FIREWALL_CMD="ufw"
@@ -42,7 +44,7 @@ case "${OS_ID}" in
         ;;
     *)
         log_error "Unsupported operating system: ${OS_ID}"
-        log_error "Supported: Rocky Linux, Ubuntu, Xubuntu"
+        log_error "Supported: Rocky Linux, RHEL, CentOS, Oracle Linux, AlmaLinux, Ubuntu, Xubuntu, Debian"
         exit 1
         ;;
 esac

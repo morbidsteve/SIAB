@@ -4,12 +4,12 @@ Get SIAB running in 10 minutes! This guide shows the **fastest path** based on w
 
 ## I Have...
 
-### ✅ A Linux Machine Already (Rocky/Ubuntu/Xubuntu)
+### ✅ A Linux Machine Already
 
 **Fastest Method:** Direct installation (5 minutes)
 
 ```bash
-# SSH to your Linux machine (Rocky, Ubuntu, or Xubuntu)
+# SSH to your Linux machine
 ssh user@your-linux-machine
 
 # Run one command
@@ -19,7 +19,9 @@ curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | s
 # Access at: https://dashboard.siab.local
 ```
 
-**Supported OS:** Rocky Linux 8.x/9.x, Ubuntu 20.04+, Xubuntu 20.04+
+**Supported OS:**
+- **RHEL-based:** Rocky Linux, Oracle Linux, AlmaLinux, RHEL, CentOS Stream (8.x/9.x)
+- **Debian-based:** Ubuntu, Xubuntu, Debian (20.04+/11+)
 
 **Works from:** Windows, macOS, or Linux workstation
 
@@ -244,13 +246,13 @@ kubectl get svc -n istio-system istio-ingress
 | Component | OS Required |
 |-----------|-------------|
 | **Your Laptop/Workstation** | Windows, macOS, or Linux |
-| **SIAB Installation** | Rocky Linux 8.x/9.x, Ubuntu 20.04+, or Xubuntu 20.04+ |
+| **SIAB Installation** | RHEL-based (Rocky, Oracle, Alma, RHEL, CentOS) or Debian-based (Ubuntu, Xubuntu, Debian) |
 | **PXE Provisioning Server** | Rocky Linux or Ubuntu |
 | **MAAS Provisioning Server** | Ubuntu 22.04 |
 | **GUI Provisioner** | Runs on Windows/macOS/Linux |
 | **Application Catalog** | Access from any OS browser |
 
-**Bottom line:** You can **control** SIAB from any OS, and it **runs on** Rocky Linux, Ubuntu, or Xubuntu.
+**Bottom line:** You can **control** SIAB from any OS, and it **runs on** major enterprise Linux distributions (RHEL family & Debian family).
 
 ## Next Steps
 

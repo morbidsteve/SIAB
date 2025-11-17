@@ -2,11 +2,17 @@
 set -euo pipefail
 
 # SIAB MAAS Integration Setup
-# This script configures MAAS to provision Rocky Linux with SIAB
+# This script configures MAAS to provision Linux distributions with SIAB
 
 readonly MAAS_VERSION="${MAAS_VERSION:-3.4}"
 readonly ROCKY_VERSION="${ROCKY_VERSION:-9.3}"
+readonly UBUNTU_VERSION="${UBUNTU_VERSION:-22.04}"
+readonly ORACLE_VERSION="${ORACLE_VERSION:-9}"
+readonly ALMA_VERSION="${ALMA_VERSION:-9}"
 readonly SIAB_PROVISION_DIR="/var/www/siab-provision"
+
+# Which OS images to import (comma-separated): rocky,ubuntu,oracle,alma
+readonly IMPORT_OSES="${IMPORT_OSES:-rocky,ubuntu}"
 
 # Colors
 readonly GREEN='\033[0;32m'
@@ -64,6 +70,15 @@ configure_maas() {
     chmod 600 /etc/siab/maas.env
 }
 
+import_ubuntu_images() {
+    log_info "Importing Ubuntu ${UBUNTU_VERSION} images..."
+
+    # Ubuntu is natively supported by MAAS
+    maas admin boot-resources import os=ubuntu series=${UBUNTU_VERSION/./}
+
+    log_info "Ubuntu ${UBUNTU_VERSION} images imported"
+}
+
 import_rocky_images() {
     log_info "Importing Rocky Linux ${ROCKY_VERSION} images..."
 
@@ -92,6 +107,83 @@ import_rocky_images() {
     rmdir /tmp/rocky-mount
 
     log_info "Rocky Linux boot images extracted"
+}
+
+import_oracle_images() {
+    log_info "Importing Oracle Linux ${ORACLE_VERSION} images..."
+
+    mkdir -p "${SIAB_PROVISION_DIR}/images"
+    cd "${SIAB_PROVISION_DIR}/images"
+
+    local oracle_iso="OracleLinux-R${ORACLE_VERSION}-U0-x86_64-dvd.iso"
+    local oracle_url="https://yum.oracle.com/ISOS/OracleLinux/OL${ORACLE_VERSION}/u0/x86_64/${oracle_iso}"
+
+    log_info "Downloading Oracle Linux ${ORACLE_VERSION}..."
+    wget -c "${oracle_url}" -O "${oracle_iso}"
+
+    # Extract kernel and initrd from ISO
+    mkdir -p /tmp/oracle-mount
+    mount -o loop "${oracle_iso}" /tmp/oracle-mount
+
+    mkdir -p "${SIAB_PROVISION_DIR}/boot/oracle-${ORACLE_VERSION}"
+    cp /tmp/oracle-mount/images/pxeboot/vmlinuz "${SIAB_PROVISION_DIR}/boot/oracle-${ORACLE_VERSION}/"
+    cp /tmp/oracle-mount/images/pxeboot/initrd.img "${SIAB_PROVISION_DIR}/boot/oracle-${ORACLE_VERSION}/"
+
+    umount /tmp/oracle-mount
+    rmdir /tmp/oracle-mount
+
+    log_info "Oracle Linux boot images extracted"
+}
+
+import_alma_images() {
+    log_info "Importing AlmaLinux ${ALMA_VERSION} images..."
+
+    mkdir -p "${SIAB_PROVISION_DIR}/images"
+    cd "${SIAB_PROVISION_DIR}/images"
+
+    local alma_iso="AlmaLinux-${ALMA_VERSION}-x86_64-minimal.iso"
+    local alma_url="https://repo.almalinux.org/almalinux/${ALMA_VERSION}/isos/x86_64/${alma_iso}"
+
+    log_info "Downloading AlmaLinux ${ALMA_VERSION}..."
+    wget -c "${alma_url}" -O "${alma_iso}"
+
+    # Extract kernel and initrd from ISO
+    mkdir -p /tmp/alma-mount
+    mount -o loop "${alma_iso}" /tmp/alma-mount
+
+    mkdir -p "${SIAB_PROVISION_DIR}/boot/alma-${ALMA_VERSION}"
+    cp /tmp/alma-mount/images/pxeboot/vmlinuz "${SIAB_PROVISION_DIR}/boot/alma-${ALMA_VERSION}/"
+    cp /tmp/alma-mount/images/pxeboot/initrd.img "${SIAB_PROVISION_DIR}/boot/alma-${ALMA_VERSION}/"
+
+    umount /tmp/alma-mount
+    rmdir /tmp/alma-mount
+
+    log_info "AlmaLinux boot images extracted"
+}
+
+import_os_images() {
+    log_info "Importing OS images: ${IMPORT_OSES}"
+
+    IFS=',' read -ra OSES <<< "$IMPORT_OSES"
+    for os in "${OSES[@]}"; do
+        case "$os" in
+            ubuntu)
+                import_ubuntu_images
+                ;;
+            rocky)
+                import_rocky_images
+                ;;
+            oracle)
+                import_oracle_images
+                ;;
+            alma)
+                import_alma_images
+                ;;
+            *)
+                log_warn "Unknown OS: $os, skipping..."
+                ;;
+        esac
+    done
 }
 
 create_siab_curtin_config() {
@@ -292,9 +384,8 @@ main() {
 
     install_maas
     configure_maas
-    import_rocky_images
+    import_os_images
     create_siab_curtin_config
-    create_rocky_preseed
     configure_dhcp
     create_siab_deploy_script
     setup_pxe_boot
