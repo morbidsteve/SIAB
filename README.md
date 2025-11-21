@@ -132,7 +132,7 @@ Debian-based:
 **Hardware Requirements:**
 - Minimum 4 CPU cores
 - Minimum 16GB RAM
-- Minimum 100GB disk space
+- Minimum 30GB disk space
 - Root or sudo access
 - Internet connectivity
 

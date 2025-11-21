@@ -67,7 +67,7 @@ SIAB-Provisioner.bat
   - Rocky Linux 9: https://rockylinux.org
   - Ubuntu 22.04 LTS: https://ubuntu.com/download/server
   - Xubuntu 22.04 LTS: https://xubuntu.org/download
-- Create VM: 4 CPU, 16GB RAM, 100GB disk
+- Create VM: 4 CPU, 16GB RAM, 30GB disk
 - Install Linux (minimal/server installation)
 
 **Step 2: Install SIAB**
@@ -94,7 +94,7 @@ kubectl get svc -n istio-system istio-ingress
 
 **Step 1: Launch Instance**
 - OS: Rocky Linux 9
-- Size: 4 vCPU, 16GB RAM, 100GB disk
+- Size: 4 vCPU, 16GB RAM, 30GB disk
 - Security Group: Allow 22, 80, 443, 6443
 - Public IP: Yes
 
@@ -178,7 +178,7 @@ https://keycloak.siab.local
 **Solution 1:** Create a VM
 - Download VirtualBox (free)
 - Download Rocky Linux 9, Ubuntu 22.04, or Xubuntu 22.04 ISO
-- Create VM: 4 CPU, 16GB RAM, 100GB disk
+- Create VM: 4 CPU, 16GB RAM, 30GB disk
 - Install, then run SIAB installer
 
 **Solution 2:** Use cloud

@@ -336,7 +336,7 @@ After cluster deployment:
 
 2. **Monitor During Deployment**: Keep the Monitor tab open during deployment to catch issues early
 
-3. **Check Prerequisites**: Ensure target machines meet SIAB requirements (4 CPU, 16GB RAM, 100GB disk)
+3. **Check Prerequisites**: Ensure target machines meet SIAB requirements (4 CPU, 16GB RAM, 30GB disk)
 
 4. **Use MAAS for Scale**: For 10+ nodes, use MAAS instead of PXE
 

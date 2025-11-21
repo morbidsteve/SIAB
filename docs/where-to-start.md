@@ -77,7 +77,7 @@ open https://dashboard.siab.local
 
 **Requirements:**
 - ✅ Works from: **Windows, macOS, Linux**
-- Target: Any supported Linux distribution (RHEL/Debian family) with 4 CPU, 16GB RAM, 100GB disk
+- Target: Any supported Linux distribution (RHEL/Debian family) with 4 CPU, 16GB RAM, 30GB disk
 
 ---
 
@@ -163,7 +163,7 @@ https://rockylinux.org/download
 # 2. Create VM with:
 #    - 4 CPU cores
 #    - 16GB RAM
-#    - 100GB disk
+#    - 30GB disk
 #    - Network: Bridged
 
 # 3. Install Rocky Linux 9 (minimal)
@@ -197,7 +197,7 @@ open https://<vm-ip>:30443  # Find NodePort from kubectl get svc
 # 1. Launch Rocky Linux instance:
 #    - OS: Rocky Linux 9
 #    - Size: 4 vCPU, 16GB RAM
-#    - Disk: 100GB
+#    - Disk: 30GB
 #    - Security Group: Allow 22, 80, 443, 6443
 
 # 2. SSH to instance

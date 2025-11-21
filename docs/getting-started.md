@@ -7,7 +7,7 @@ This guide will help you install SIAB and deploy your first application.
 - Rocky Linux 8.x or 9.x
 - 4+ CPU cores
 - 16GB+ RAM
-- 100GB+ disk space
+- 30GB+ disk space
 - Root access
 - Internet connectivity
 

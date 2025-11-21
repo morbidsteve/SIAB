@@ -28,7 +28,7 @@ SIAB supports multiple methods for bare metal provisioning:
 - x86_64 architecture
 - Minimum 4 CPU cores
 - Minimum 16GB RAM
-- Minimum 100GB disk
+- Minimum 30GB disk
 - PXE boot capable network card
 - IPMI/BMC interface (optional but recommended)
 

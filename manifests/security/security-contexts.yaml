@@ -47,7 +47,7 @@ spec:
     secrets: "20"
     configmaps: "20"
     persistentvolumeclaims: "10"
-    requests.storage: "100Gi"
+    requests.storage: "20Gi"
 ---
 # PodDisruptionBudget template for high availability
 apiVersion: policy/v1

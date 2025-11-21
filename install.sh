@@ -64,7 +64,7 @@ SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
 SIAB_ADMIN_EMAIL="${SIAB_ADMIN_EMAIL:-admin@${SIAB_DOMAIN}}"
 SIAB_SKIP_MONITORING="${SIAB_SKIP_MONITORING:-false}"
 SIAB_SKIP_STORAGE="${SIAB_SKIP_STORAGE:-false}"
-SIAB_MINIO_SIZE="${SIAB_MINIO_SIZE:-100Gi}"
+SIAB_MINIO_SIZE="${SIAB_MINIO_SIZE:-20Gi}"
 SIAB_SINGLE_NODE="${SIAB_SINGLE_NODE:-true}"
 
 # Colors for output
@@ -129,8 +129,8 @@ check_requirements() {
     # Check disk space
     local free_space
     free_space=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
-    if [[ $free_space -lt 80 ]]; then
-        log_error "Minimum 100GB free disk space required (found: ${free_space}GB)"
+    if [[ $free_space -lt 25 ]]; then
+        log_error "Minimum 30GB free disk space required (found: ${free_space}GB)"
         exit 1
     fi
 

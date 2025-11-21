@@ -31,7 +31,7 @@ export SIAB_SINGLE_NODE="true"
 
 ```bash
 # MinIO storage size
-export SIAB_MINIO_SIZE="100Gi"
+export SIAB_MINIO_SIZE="20Gi"
 ```
 
 ### Version Pinning

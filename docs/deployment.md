@@ -140,7 +140,7 @@ spec:
   objectStorage:
     enabled: true
     bucketName: "my-app-data"
-    quotaSize: "100Gi"
+    quotaSize: "10Gi"
     injectCredentials: true
 ```
 
