@@ -152,6 +152,9 @@ install_dependencies() {
     log_step "Installing system dependencies..."
 
     if [[ "${OS_FAMILY}" == "rhel" ]]; then
+        # Remove any leftover RKE2 repos from previous installs to avoid GPG issues
+        rm -f /etc/yum.repos.d/rancher-rke2*.repo 2>/dev/null || true
+        dnf clean all
         dnf update -y
         dnf install -y \
             curl \
