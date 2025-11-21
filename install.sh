@@ -304,6 +304,12 @@ install_rke2() {
     # Create RKE2 config directory
     mkdir -p /etc/rancher/rke2
 
+    # Determine SELinux setting based on OS
+    local selinux_enabled="false"
+    if [[ "${SECURITY_MODULE}" == "selinux" ]]; then
+        selinux_enabled="true"
+    fi
+
     # RKE2 hardened configuration
     cat > /etc/rancher/rke2/config.yaml <<EOF
 # RKE2 Security Hardened Configuration
@@ -330,16 +336,9 @@ kubelet-arg:
   - "rotate-certificates=true"
   - "tls-cipher-suites=TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
 profile: "cis-1.23"
-selinux: ${SECURITY_MODULE_ENABLED}
+selinux: ${selinux_enabled}
 secrets-encryption: true
 EOF
-
-    # Set the security module flag based on OS
-    if [[ "${SECURITY_MODULE}" == "selinux" ]]; then
-        sed -i "s/selinux: \${SECURITY_MODULE_ENABLED}/selinux: true/" /etc/rancher/rke2/config.yaml
-    else
-        sed -i "s/selinux: \${SECURITY_MODULE_ENABLED}/selinux: false/" /etc/rancher/rke2/config.yaml
-    fi
 
     # Create audit policy
     mkdir -p /var/log/kubernetes/audit
