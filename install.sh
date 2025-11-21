@@ -398,6 +398,25 @@ resources:
 EOF
     chmod 600 /etc/rancher/rke2/encryption-config.yaml
 
+    # Create etcd user and group (required for CIS profile)
+    if ! getent group etcd >/dev/null 2>&1; then
+        groupadd --system etcd
+    fi
+    if ! getent passwd etcd >/dev/null 2>&1; then
+        useradd --system --gid etcd --shell /sbin/nologin --comment "etcd user" etcd
+    fi
+
+    # Set required kernel parameters for CIS profile
+    log_info "Setting kernel parameters for CIS compliance..."
+    cat > /etc/sysctl.d/90-rke2-cis.conf <<EOF
+# RKE2 CIS Profile Requirements
+kernel.panic = 10
+kernel.panic_on_oops = 1
+vm.overcommit_memory = 1
+vm.panic_on_oom = 0
+EOF
+    sysctl --system
+
     # Install RKE2
     # Use tarball method for RHEL-family to avoid GPG signature issues with RPM repos
     if [[ "${OS_FAMILY}" == "rhel" ]]; then
