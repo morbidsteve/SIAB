@@ -396,7 +396,12 @@ EOF
     chmod 600 /etc/rancher/rke2/encryption-config.yaml
 
     # Install RKE2
-    curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION="${RKE2_VERSION}" sh -
+    # Use tarball method for RHEL-family to avoid GPG signature issues with RPM repos
+    if [[ "${OS_FAMILY}" == "rhel" ]]; then
+        curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION="${RKE2_VERSION}" INSTALL_RKE2_METHOD="tar" sh -
+    else
+        curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION="${RKE2_VERSION}" sh -
+    fi
 
     # Enable and start RKE2
     systemctl enable rke2-server.service
