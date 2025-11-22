@@ -732,6 +732,19 @@ install_keycloak() {
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
+    # Clean up any failed/stuck Keycloak installation
+    if helm status keycloak -n keycloak &>/dev/null; then
+        log_info "Found existing Keycloak release, checking status..."
+        local release_status=$(helm status keycloak -n keycloak -o json 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        if [[ "$release_status" != "deployed" ]]; then
+            log_info "Cleaning up failed Keycloak release (status: ${release_status})..."
+            helm uninstall keycloak -n keycloak --wait 2>/dev/null || true
+            kubectl delete pvc --all -n keycloak 2>/dev/null || true
+            kubectl delete pods --all -n keycloak --force --grace-period=0 2>/dev/null || true
+            sleep 5
+        fi
+    fi
+
     # Create Keycloak secret
     kubectl create secret generic keycloak-admin \
         --namespace keycloak \
