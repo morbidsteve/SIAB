@@ -727,7 +727,7 @@ EOF
 
 # Install Keycloak
 install_keycloak() {
-    log_step "Installing Keycloak ${KEYCLOAK_VERSION}..."
+    log_step "Installing Keycloak..."
 
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
@@ -738,10 +738,9 @@ install_keycloak() {
         --from-literal=admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install Keycloak using Helm
+    # Install Keycloak using Helm (use latest chart, not app version)
     helm upgrade --install keycloak bitnami/keycloak \
         --namespace keycloak \
-        --version ${KEYCLOAK_VERSION} \
         --set auth.adminUser=admin \
         --set auth.existingSecret=keycloak-admin \
         --set auth.passwordSecretKey=admin-password \
