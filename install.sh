@@ -558,7 +558,7 @@ install_helm() {
     log_info "Adding Helm repositories..."
     "${SIAB_BIN_DIR}/helm" repo add istio https://istio-release.storage.googleapis.com/charts || true
     "${SIAB_BIN_DIR}/helm" repo add jetstack https://charts.jetstack.io || true
-    "${SIAB_BIN_DIR}/helm" repo add bitnami https://charts.bitnami.com/bitnami || true
+    "${SIAB_BIN_DIR}/helm" repo add codecentric https://codecentric.github.io/helm-charts || true
     "${SIAB_BIN_DIR}/helm" repo add aqua https://aquasecurity.github.io/helm-charts/ || true
     "${SIAB_BIN_DIR}/helm" repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts || true
     "${SIAB_BIN_DIR}/helm" repo add minio https://charts.min.io/ || true
@@ -770,33 +770,102 @@ install_keycloak() {
     # Disable Istio sidecar injection for keycloak namespace (simplifies initial setup)
     kubectl label namespace keycloak istio-injection=disabled --overwrite 2>/dev/null || true
 
-    # Create Keycloak secret
-    kubectl create secret generic keycloak-admin \
+    # Create Keycloak admin credentials secret
+    kubectl create secret generic keycloak-credentials \
         --namespace keycloak \
-        --from-literal=admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
+        --from-literal=password="${KEYCLOAK_ADMIN_PASSWORD}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install Keycloak using Helm with specific chart version for stability
-    # Chart version 24.x works with Keycloak 26.x images
-    helm upgrade --install keycloak bitnami/keycloak \
+    # Create PostgreSQL password secret
+    local pg_password=$(openssl rand -base64 24 | tr -d '=+/' | head -c 24)
+    kubectl create secret generic keycloak-postgresql \
         --namespace keycloak \
-        --version 24.0.5 \
-        --set auth.adminUser=admin \
-        --set auth.existingSecret=keycloak-admin \
-        --set auth.passwordSecretKey=admin-password \
-        --set production=true \
-        --set proxy=edge \
-        --set proxyHeaders=xforwarded \
-        --set httpRelativePath="/" \
-        --set postgresql.enabled=true \
-        --set postgresql.auth.postgresPassword="$(openssl rand -base64 24 | tr -d '=+/')" \
-        --set postgresql.primary.persistence.enabled=false \
-        --set containerSecurityContext.runAsNonRoot=true \
-        --set containerSecurityContext.allowPrivilegeEscalation=false \
-        --set containerSecurityContext.capabilities.drop[0]=ALL \
+        --from-literal=postgres-password="${pg_password}" \
+        --from-literal=password="${pg_password}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Install Keycloak using codecentric chart with official quay.io image
+    # This uses the official Keycloak image which is more reliable
+    helm upgrade --install keycloak codecentric/keycloakx \
+        --namespace keycloak \
+        --set image.repository=quay.io/keycloak/keycloak \
+        --set image.tag=24.0 \
+        --set command[0]="/opt/keycloak/bin/kc.sh" \
+        --set args[0]="start" \
+        --set args[1]="--hostname-strict=false" \
+        --set args[2]="--http-enabled=true" \
+        --set extraEnv[0].name=KEYCLOAK_ADMIN \
+        --set extraEnv[0].value=admin \
+        --set extraEnv[1].name=KEYCLOAK_ADMIN_PASSWORD \
+        --set extraEnv[1].valueFrom.secretKeyRef.name=keycloak-credentials \
+        --set extraEnv[1].valueFrom.secretKeyRef.key=password \
+        --set extraEnv[2].name=KC_PROXY \
+        --set extraEnv[2].value=edge \
+        --set extraEnv[3].name=KC_DB \
+        --set extraEnv[3].value=postgres \
+        --set extraEnv[4].name=KC_DB_URL \
+        --set 'extraEnv[4].value=jdbc:postgresql://keycloak-postgresql:5432/keycloak' \
+        --set extraEnv[5].name=KC_DB_USERNAME \
+        --set extraEnv[5].value=postgres \
+        --set extraEnv[6].name=KC_DB_PASSWORD \
+        --set extraEnv[6].valueFrom.secretKeyRef.name=keycloak-postgresql \
+        --set extraEnv[6].valueFrom.secretKeyRef.key=password \
+        --set dbchecker.enabled=false \
         --set resources.requests.memory=512Mi \
         --set resources.requests.cpu=250m \
         --timeout=600s
+
+    # Install PostgreSQL for Keycloak using a simple deployment
+    cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak-postgresql
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak-postgresql
+  template:
+    metadata:
+      labels:
+        app: keycloak-postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: keycloak
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-postgresql
+              key: password
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-postgresql
+  namespace: keycloak
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: keycloak-postgresql
+EOF
+
+    log_info "Waiting for PostgreSQL to be ready..."
+    kubectl wait --for=condition=available deployment/keycloak-postgresql -n keycloak --timeout=120s || true
 
     # Monitor Keycloak deployment
     log_info "Waiting for Keycloak to be ready (this may take 5-10 minutes)..."
@@ -814,9 +883,9 @@ install_keycloak() {
             last_status_time=$elapsed
         fi
 
-        # Check if Keycloak is ready
-        if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
-            if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null | grep -q "true"; then
+        # Check if Keycloak is ready (codecentric chart uses keycloakx label)
+        if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
+            if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null | grep -q "true"; then
                 echo ""
                 log_info "Keycloak is ready!"
                 break
@@ -824,11 +893,12 @@ install_keycloak() {
         fi
 
         # Check for crash loops or errors
-        local pod_status=$(kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
-        if [[ "$pod_status" == "CrashLoopBackOff" ]] || [[ "$pod_status" == "Error" ]]; then
+        local pod_status=$(kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+        if [[ "$pod_status" == "CrashLoopBackOff" ]] || [[ "$pod_status" == "Error" ]] || [[ "$pod_status" == "ImagePullBackOff" ]]; then
             echo ""
             log_error "Keycloak pod is in $pod_status state"
-            kubectl logs -n keycloak -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+            kubectl describe pods -n keycloak -l app.kubernetes.io/name=keycloakx 2>/dev/null | tail -20 || true
+            kubectl logs -n keycloak -l app.kubernetes.io/name=keycloakx --tail=30 2>/dev/null || true
             exit 1
         fi
 
@@ -857,7 +927,7 @@ spec:
   http:
     - route:
         - destination:
-            host: keycloak
+            host: keycloak-keycloakx-http
             port:
               number: 80
 EOF
@@ -1114,7 +1184,61 @@ ${node_ip} dashboard.${SIAB_DOMAIN}
 EOF
     fi
 
+    # Setup kubectl access for non-root users
+    setup_nonroot_access
+
     log_info "Final configuration complete"
+}
+
+# Setup kubectl access for non-root users
+setup_nonroot_access() {
+    log_info "Setting up kubectl access for non-root users..."
+
+    # Get the user who ran sudo (if any)
+    local real_user="${SUDO_USER:-}"
+    local real_home=""
+
+    if [[ -n "$real_user" ]] && [[ "$real_user" != "root" ]]; then
+        real_home=$(getent passwd "$real_user" | cut -d: -f6)
+
+        if [[ -n "$real_home" ]]; then
+            log_info "Configuring kubectl for user: $real_user"
+
+            # Create .kube directory for the user
+            mkdir -p "${real_home}/.kube"
+
+            # Copy kubeconfig
+            cp /etc/rancher/rke2/rke2.yaml "${real_home}/.kube/config"
+
+            # Fix permissions
+            chown -R "${real_user}:${real_user}" "${real_home}/.kube"
+            chmod 600 "${real_home}/.kube/config"
+
+            # Add RKE2 and SIAB bins to user's PATH
+            if ! grep -q "/var/lib/rancher/rke2/bin" "${real_home}/.bashrc" 2>/dev/null; then
+                cat >> "${real_home}/.bashrc" <<'EOF'
+
+# SIAB - Kubernetes tools
+export PATH=$PATH:/var/lib/rancher/rke2/bin:/usr/local/bin
+export KUBECONFIG=$HOME/.kube/config
+EOF
+                chown "${real_user}:${real_user}" "${real_home}/.bashrc"
+            fi
+
+            log_info "User $real_user can now run kubectl, helm, and k9s without sudo"
+        fi
+    fi
+
+    # Also ensure the credentials file is readable
+    if [[ -n "$real_user" ]] && [[ "$real_user" != "root" ]]; then
+        # Create a copy of credentials for the user
+        if [[ -f "${SIAB_CONFIG_DIR}/credentials.env" ]]; then
+            cp "${SIAB_CONFIG_DIR}/credentials.env" "${real_home}/.siab-credentials.env"
+            chown "${real_user}:${real_user}" "${real_home}/.siab-credentials.env"
+            chmod 600 "${real_home}/.siab-credentials.env"
+            log_info "Credentials copied to ${real_home}/.siab-credentials.env"
+        fi
+    fi
 }
 
 # Print completion message
@@ -1137,6 +1261,15 @@ print_completion() {
     echo "To deploy applications, use the SIABApplication CRD:"
     echo "  kubectl apply -f my-siab-app.yaml"
     echo ""
+    echo "Cluster monitoring with k9s:"
+    echo "  k9s"
+    echo ""
+    if [[ -n "${SUDO_USER:-}" ]] && [[ "${SUDO_USER}" != "root" ]]; then
+        echo "Non-root access configured for user: ${SUDO_USER}"
+        echo "  Run: source ~/.bashrc  (or log out and back in)"
+        echo "  Then use kubectl, helm, k9s without sudo"
+        echo ""
+    fi
     echo "Documentation: ${SIAB_DIR}/docs/"
     echo ""
     echo "Thank you for installing SIAB!"
