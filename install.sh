@@ -1008,15 +1008,14 @@ install_minio() {
         --from-literal=rootPassword="${MINIO_ROOT_PASSWORD}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install MinIO
+    # Install MinIO (persistence disabled for single-node setup without storage provisioner)
     helm upgrade --install minio minio/minio \
         --namespace minio \
         --set rootUser="${MINIO_ROOT_USER}" \
         --set rootPassword="${MINIO_ROOT_PASSWORD}" \
         --set mode=standalone \
         --set replicas=1 \
-        --set persistence.enabled=true \
-        --set persistence.size="${SIAB_MINIO_SIZE}" \
+        --set persistence.enabled=false \
         --set resources.requests.memory=1Gi \
         --set securityContext.runAsUser=1000 \
         --set securityContext.runAsGroup=1000 \
