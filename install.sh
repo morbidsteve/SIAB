@@ -567,6 +567,28 @@ install_helm() {
     log_info "Helm installed successfully"
 }
 
+# Install k9s for cluster monitoring
+install_k9s() {
+    log_step "Installing k9s..."
+
+    local k9s_version="v0.32.5"
+    local k9s_url="https://github.com/derailed/k9s/releases/download/${k9s_version}/k9s_Linux_amd64.tar.gz"
+
+    if ! curl -fsSL "${k9s_url}" -o /tmp/k9s.tar.gz; then
+        log_error "Failed to download k9s"
+        exit 1
+    fi
+
+    cd /tmp
+    tar xzf k9s.tar.gz k9s
+    mv k9s "${SIAB_BIN_DIR}/k9s"
+    rm -f k9s.tar.gz
+    chmod +x "${SIAB_BIN_DIR}/k9s"
+    cd - >/dev/null
+
+    log_info "k9s installed at ${SIAB_BIN_DIR}/k9s"
+}
+
 # Generate secure credentials
 generate_credentials() {
     log_step "Generating secure credentials..."
@@ -745,18 +767,20 @@ install_keycloak() {
         fi
     fi
 
+    # Disable Istio sidecar injection for keycloak namespace (simplifies initial setup)
+    kubectl label namespace keycloak istio-injection=disabled --overwrite 2>/dev/null || true
+
     # Create Keycloak secret
     kubectl create secret generic keycloak-admin \
         --namespace keycloak \
         --from-literal=admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install Keycloak using Helm
-    # Use specific image tag to avoid latest tag issues with missing images
-    # Also disable persistence for simpler single-node setup
+    # Install Keycloak using Helm with specific chart version for stability
+    # Chart version 24.x works with Keycloak 26.x images
     helm upgrade --install keycloak bitnami/keycloak \
         --namespace keycloak \
-        --set image.tag=26.0.5-debian-12-r0 \
+        --version 24.0.5 \
         --set auth.adminUser=admin \
         --set auth.existingSecret=keycloak-admin \
         --set auth.passwordSecretKey=admin-password \
@@ -1135,6 +1159,7 @@ main() {
     configure_security
     install_rke2
     install_helm
+    install_k9s
     generate_credentials
     create_namespaces
     install_cert_manager
