@@ -10,6 +10,9 @@ readonly SIAB_CONFIG_DIR="/etc/siab"
 readonly SIAB_LOG_DIR="/var/log/siab"
 readonly SIAB_BIN_DIR="/usr/local/bin"
 
+# Ensure SIAB bin directory is in PATH
+export PATH="${SIAB_BIN_DIR}:/var/lib/rancher/rke2/bin:${PATH}"
+
 # Detect OS
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -509,14 +512,18 @@ install_helm() {
     rm -rf linux-amd64
     chmod +x "${SIAB_BIN_DIR}/helm"
 
+    # Ensure helm is in PATH for this script
+    export PATH="${SIAB_BIN_DIR}:${PATH}"
+    hash -r  # Clear bash command cache
+
     # Add Helm repos
-    helm repo add istio https://istio-release.storage.googleapis.com/charts
-    helm repo add jetstack https://charts.jetstack.io
-    helm repo add bitnami https://charts.bitnami.com/bitnami
-    helm repo add aqua https://aquasecurity.github.io/helm-charts/
-    helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
-    helm repo add minio https://charts.min.io/
-    helm repo update
+    "${SIAB_BIN_DIR}/helm" repo add istio https://istio-release.storage.googleapis.com/charts
+    "${SIAB_BIN_DIR}/helm" repo add jetstack https://charts.jetstack.io
+    "${SIAB_BIN_DIR}/helm" repo add bitnami https://charts.bitnami.com/bitnami
+    "${SIAB_BIN_DIR}/helm" repo add aqua https://aquasecurity.github.io/helm-charts/
+    "${SIAB_BIN_DIR}/helm" repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
+    "${SIAB_BIN_DIR}/helm" repo add minio https://charts.min.io/
+    "${SIAB_BIN_DIR}/helm" repo update
 
     log_info "Helm installed successfully"
 }
