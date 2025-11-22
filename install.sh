@@ -438,23 +438,43 @@ EOF
     # Start RKE2 and monitor startup
     log_info "Starting RKE2 service..."
     log_info "First startup takes 5-10 minutes. Monitoring progress..."
+    echo ""
     systemctl start rke2-server.service &
 
-    # Monitor RKE2 startup with progress tracking
+    # Monitor RKE2 startup with real-time status display
     local max_wait=600  # 10 minutes
     local elapsed=0
-    local dots=0
+    local last_status_time=0
 
     while [[ $elapsed -lt $max_wait ]]; do
         # Check if service failed
-        local status=$(systemctl is-active rke2-server 2>/dev/null || echo "unknown")
+        local svc_status=$(systemctl is-active rke2-server 2>/dev/null || echo "unknown")
 
-        if [[ "$status" == "failed" ]]; then
+        if [[ "$svc_status" == "failed" ]]; then
             echo ""
             log_error "RKE2 service failed!"
-            log_error "Check logs with: journalctl -xeu rke2-server"
-            journalctl -u rke2-server --no-pager -n 30
+            echo "----------------------------------------"
+            systemctl status rke2-server --no-pager -l 2>/dev/null || true
+            echo "----------------------------------------"
+            log_error "Recent logs:"
+            journalctl -u rke2-server --no-pager -n 20
             exit 1
+        fi
+
+        # Show status every 30 seconds
+        if [[ $((elapsed - last_status_time)) -ge 30 ]] || [[ $elapsed -eq 0 ]]; then
+            echo ""
+            echo "=== RKE2 Status (${elapsed}s elapsed) ==="
+            # Show brief service status
+            local active_state=$(systemctl show rke2-server --property=ActiveState --value 2>/dev/null || echo "unknown")
+            local sub_state=$(systemctl show rke2-server --property=SubState --value 2>/dev/null || echo "unknown")
+            echo "Service: ${active_state} (${sub_state})"
+
+            # Show what's happening from recent logs (last 3 lines)
+            echo "Recent activity:"
+            journalctl -u rke2-server --no-pager -n 3 -q 2>/dev/null | tail -3 || echo "  (waiting for logs...)"
+            echo "================================="
+            last_status_time=$elapsed
         fi
 
         # Check if kubectl is available and working
@@ -465,15 +485,13 @@ EOF
                get nodes &>/dev/null 2>&1; then
                 echo ""
                 log_info "RKE2 is ready!"
+                # Show final node status
+                echo ""
+                /var/lib/rancher/rke2/bin/kubectl \
+                    --kubeconfig /etc/rancher/rke2/rke2.yaml \
+                    get nodes
                 break
             fi
-        fi
-
-        # Show progress
-        printf "."
-        dots=$((dots + 1))
-        if [[ $((dots % 60)) -eq 0 ]]; then
-            echo " (${elapsed}s)"
         fi
 
         sleep 5
@@ -483,7 +501,8 @@ EOF
     if [[ $elapsed -ge $max_wait ]]; then
         echo ""
         log_error "RKE2 startup timeout after ${max_wait}s"
-        log_error "Check status: systemctl status rke2-server"
+        log_error "Final status:"
+        systemctl status rke2-server --no-pager -l 2>/dev/null || true
         log_error "Check logs: journalctl -fu rke2-server"
         exit 1
     fi
@@ -507,22 +526,42 @@ EOF
 install_helm() {
     log_step "Installing Helm ${HELM_VERSION}..."
 
-    curl -fsSL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar xz
+    # Download and extract Helm
+    local helm_url="https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+    log_info "Downloading Helm from ${helm_url}..."
+
+    if ! curl -fsSL "${helm_url}" -o /tmp/helm.tar.gz; then
+        log_error "Failed to download Helm"
+        exit 1
+    fi
+
+    cd /tmp
+    tar xzf helm.tar.gz
     mv linux-amd64/helm "${SIAB_BIN_DIR}/helm"
-    rm -rf linux-amd64
+    rm -rf linux-amd64 helm.tar.gz
     chmod +x "${SIAB_BIN_DIR}/helm"
+    cd - >/dev/null
 
-    # Ensure helm is in PATH for this script
+    # Verify helm binary exists
+    if [[ ! -x "${SIAB_BIN_DIR}/helm" ]]; then
+        log_error "Helm binary not found at ${SIAB_BIN_DIR}/helm"
+        exit 1
+    fi
+
+    log_info "Helm binary installed at ${SIAB_BIN_DIR}/helm"
+
+    # Ensure PATH is updated
     export PATH="${SIAB_BIN_DIR}:${PATH}"
-    hash -r  # Clear bash command cache
+    hash -r 2>/dev/null || true
 
-    # Add Helm repos
-    "${SIAB_BIN_DIR}/helm" repo add istio https://istio-release.storage.googleapis.com/charts
-    "${SIAB_BIN_DIR}/helm" repo add jetstack https://charts.jetstack.io
-    "${SIAB_BIN_DIR}/helm" repo add bitnami https://charts.bitnami.com/bitnami
-    "${SIAB_BIN_DIR}/helm" repo add aqua https://aquasecurity.github.io/helm-charts/
-    "${SIAB_BIN_DIR}/helm" repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
-    "${SIAB_BIN_DIR}/helm" repo add minio https://charts.min.io/
+    # Add Helm repos using full path
+    log_info "Adding Helm repositories..."
+    "${SIAB_BIN_DIR}/helm" repo add istio https://istio-release.storage.googleapis.com/charts || true
+    "${SIAB_BIN_DIR}/helm" repo add jetstack https://charts.jetstack.io || true
+    "${SIAB_BIN_DIR}/helm" repo add bitnami https://charts.bitnami.com/bitnami || true
+    "${SIAB_BIN_DIR}/helm" repo add aqua https://aquasecurity.github.io/helm-charts/ || true
+    "${SIAB_BIN_DIR}/helm" repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts || true
+    "${SIAB_BIN_DIR}/helm" repo add minio https://charts.min.io/ || true
     "${SIAB_BIN_DIR}/helm" repo update
 
     log_info "Helm installed successfully"
