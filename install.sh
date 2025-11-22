@@ -852,6 +852,8 @@ args:
   - "--hostname-strict=false"
   - "--http-enabled=true"
 
+# Override default cache settings - use local cache for single node
+# The chart defaults to jdbc-ping which isn't supported in Keycloak 24
 extraEnv: |
   - name: KEYCLOAK_ADMIN
     value: admin
@@ -873,8 +875,16 @@ extraEnv: |
       secretKeyRef:
         name: keycloak-postgresql
         key: password
+  - name: KC_CACHE
+    value: local
+  - name: KC_HTTP_RELATIVE_PATH
+    value: /
 
 dbchecker:
+  enabled: false
+
+# Disable the chart's default cache settings
+cache:
   enabled: false
 
 resources:
