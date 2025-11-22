@@ -746,6 +746,7 @@ install_keycloak() {
         --set auth.passwordSecretKey=admin-password \
         --set production=true \
         --set proxy=edge \
+        --set proxyHeaders=xforwarded \
         --set httpRelativePath="/" \
         --set postgresql.enabled=true \
         --set postgresql.auth.postgresPassword="$(openssl rand -base64 24 | tr -d '=+/')" \
