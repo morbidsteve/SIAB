@@ -739,6 +739,7 @@ install_keycloak() {
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Install Keycloak using Helm (use latest chart, not app version)
+    # Don't use --wait, we'll monitor manually for better feedback
     helm upgrade --install keycloak bitnami/keycloak \
         --namespace keycloak \
         --set auth.adminUser=admin \
@@ -755,7 +756,51 @@ install_keycloak() {
         --set containerSecurityContext.capabilities.drop[0]=ALL \
         --set resources.requests.memory=512Mi \
         --set resources.requests.cpu=250m \
-        --wait --timeout=600s
+        --timeout=600s
+
+    # Monitor Keycloak deployment
+    log_info "Waiting for Keycloak to be ready (this may take 5-10 minutes)..."
+    local max_wait=600
+    local elapsed=0
+    local last_status_time=0
+
+    while [[ $elapsed -lt $max_wait ]]; do
+        # Show status every 30 seconds
+        if [[ $((elapsed - last_status_time)) -ge 30 ]] || [[ $elapsed -eq 0 ]]; then
+            echo ""
+            echo "=== Keycloak Status (${elapsed}s elapsed) ==="
+            kubectl get pods -n keycloak -o wide 2>/dev/null || echo "  (waiting for pods...)"
+            echo "================================="
+            last_status_time=$elapsed
+        fi
+
+        # Check if Keycloak is ready
+        if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
+            if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null | grep -q "true"; then
+                echo ""
+                log_info "Keycloak is ready!"
+                break
+            fi
+        fi
+
+        # Check for crash loops or errors
+        local pod_status=$(kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloak -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+        if [[ "$pod_status" == "CrashLoopBackOff" ]] || [[ "$pod_status" == "Error" ]]; then
+            echo ""
+            log_error "Keycloak pod is in $pod_status state"
+            kubectl logs -n keycloak -l app.kubernetes.io/name=keycloak --tail=30 2>/dev/null || true
+            exit 1
+        fi
+
+        sleep 10
+        elapsed=$((elapsed + 10))
+    done
+
+    if [[ $elapsed -ge $max_wait ]]; then
+        log_error "Keycloak installation timeout after ${max_wait}s"
+        kubectl describe pods -n keycloak
+        exit 1
+    fi
 
     # Create Istio VirtualService for Keycloak
     cat <<EOF | kubectl apply -f -
