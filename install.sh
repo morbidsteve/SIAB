@@ -738,10 +738,12 @@ install_keycloak() {
         --from-literal=admin-password="${KEYCLOAK_ADMIN_PASSWORD}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install Keycloak using Helm (use latest chart, not app version)
-    # Don't use --wait, we'll monitor manually for better feedback
+    # Install Keycloak using Helm
+    # Use specific image tag to avoid latest tag issues with missing images
+    # Also disable persistence for simpler single-node setup
     helm upgrade --install keycloak bitnami/keycloak \
         --namespace keycloak \
+        --set image.tag=26.0.5-debian-12-r0 \
         --set auth.adminUser=admin \
         --set auth.existingSecret=keycloak-admin \
         --set auth.passwordSecretKey=admin-password \
@@ -751,6 +753,7 @@ install_keycloak() {
         --set httpRelativePath="/" \
         --set postgresql.enabled=true \
         --set postgresql.auth.postgresPassword="$(openssl rand -base64 24 | tr -d '=+/')" \
+        --set postgresql.primary.persistence.enabled=false \
         --set containerSecurityContext.runAsNonRoot=true \
         --set containerSecurityContext.allowPrivilegeEscalation=false \
         --set containerSecurityContext.capabilities.drop[0]=ALL \
