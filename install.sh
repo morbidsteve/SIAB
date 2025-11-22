@@ -784,38 +784,7 @@ install_keycloak() {
         --from-literal=password="${pg_password}" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install Keycloak using codecentric chart with official quay.io image
-    # This uses the official Keycloak image which is more reliable
-    helm upgrade --install keycloak codecentric/keycloakx \
-        --namespace keycloak \
-        --set image.repository=quay.io/keycloak/keycloak \
-        --set image.tag=24.0 \
-        --set command[0]="/opt/keycloak/bin/kc.sh" \
-        --set args[0]="start" \
-        --set args[1]="--hostname-strict=false" \
-        --set args[2]="--http-enabled=true" \
-        --set extraEnv[0].name=KEYCLOAK_ADMIN \
-        --set extraEnv[0].value=admin \
-        --set extraEnv[1].name=KEYCLOAK_ADMIN_PASSWORD \
-        --set extraEnv[1].valueFrom.secretKeyRef.name=keycloak-credentials \
-        --set extraEnv[1].valueFrom.secretKeyRef.key=password \
-        --set extraEnv[2].name=KC_PROXY \
-        --set extraEnv[2].value=edge \
-        --set extraEnv[3].name=KC_DB \
-        --set extraEnv[3].value=postgres \
-        --set extraEnv[4].name=KC_DB_URL \
-        --set 'extraEnv[4].value=jdbc:postgresql://keycloak-postgresql:5432/keycloak' \
-        --set extraEnv[5].name=KC_DB_USERNAME \
-        --set extraEnv[5].value=postgres \
-        --set extraEnv[6].name=KC_DB_PASSWORD \
-        --set extraEnv[6].valueFrom.secretKeyRef.name=keycloak-postgresql \
-        --set extraEnv[6].valueFrom.secretKeyRef.key=password \
-        --set dbchecker.enabled=false \
-        --set resources.requests.memory=512Mi \
-        --set resources.requests.cpu=250m \
-        --timeout=600s
-
-    # Install PostgreSQL for Keycloak using a simple deployment
+    # Install PostgreSQL for Keycloak first
     cat <<EOF | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -866,6 +835,61 @@ EOF
 
     log_info "Waiting for PostgreSQL to be ready..."
     kubectl wait --for=condition=available deployment/keycloak-postgresql -n keycloak --timeout=120s || true
+    sleep 5
+
+    # Create Keycloak values file
+    local keycloak_values="/tmp/keycloak-values.yaml"
+    cat > "${keycloak_values}" <<EOF
+image:
+  repository: quay.io/keycloak/keycloak
+  tag: "24.0"
+
+command:
+  - "/opt/keycloak/bin/kc.sh"
+
+args:
+  - "start"
+  - "--hostname-strict=false"
+  - "--http-enabled=true"
+
+extraEnv: |
+  - name: KEYCLOAK_ADMIN
+    value: admin
+  - name: KEYCLOAK_ADMIN_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-credentials
+        key: password
+  - name: KC_PROXY
+    value: edge
+  - name: KC_DB
+    value: postgres
+  - name: KC_DB_URL
+    value: jdbc:postgresql://keycloak-postgresql:5432/keycloak
+  - name: KC_DB_USERNAME
+    value: postgres
+  - name: KC_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: keycloak-postgresql
+        key: password
+
+dbchecker:
+  enabled: false
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 250m
+EOF
+
+    # Install Keycloak using codecentric chart with official quay.io image
+    helm upgrade --install keycloak codecentric/keycloakx \
+        --namespace keycloak \
+        -f "${keycloak_values}" \
+        --timeout=600s
+
+    rm -f "${keycloak_values}"
 
     # Monitor Keycloak deployment
     log_info "Waiting for Keycloak to be ready (this may take 5-10 minutes)..."
