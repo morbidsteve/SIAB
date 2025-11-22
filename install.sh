@@ -754,38 +754,43 @@ install_keycloak() {
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
-    # Clean up any failed/stuck Keycloak installation
-    if helm status keycloak -n keycloak &>/dev/null; then
-        log_info "Found existing Keycloak release, checking status..."
-        local release_status=$(helm status keycloak -n keycloak -o json 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
-        if [[ "$release_status" != "deployed" ]]; then
-            log_info "Cleaning up failed Keycloak release (status: ${release_status})..."
-            helm uninstall keycloak -n keycloak --wait 2>/dev/null || true
-            kubectl delete pvc --all -n keycloak 2>/dev/null || true
-            kubectl delete pods --all -n keycloak --force --grace-period=0 2>/dev/null || true
-            sleep 5
-        fi
-    fi
+    # Clean up any existing Keycloak installation
+    log_info "Cleaning up any existing Keycloak installation..."
+    helm uninstall keycloak -n keycloak 2>/dev/null || true
+    kubectl delete statefulset,deployment,service,secret -l app=keycloak -n keycloak 2>/dev/null || true
+    kubectl delete statefulset,deployment,service -l app.kubernetes.io/name=keycloakx -n keycloak 2>/dev/null || true
+    kubectl delete pvc --all -n keycloak 2>/dev/null || true
+    kubectl delete pods --all -n keycloak --force --grace-period=0 2>/dev/null || true
+    sleep 3
 
-    # Disable Istio sidecar injection for keycloak namespace (simplifies initial setup)
+    # Disable Istio sidecar injection for keycloak namespace
     kubectl label namespace keycloak istio-injection=disabled --overwrite 2>/dev/null || true
 
-    # Create Keycloak admin credentials secret
-    kubectl create secret generic keycloak-credentials \
-        --namespace keycloak \
-        --from-literal=password="${KEYCLOAK_ADMIN_PASSWORD}" \
-        --dry-run=client -o yaml | kubectl apply -f -
-
-    # Create PostgreSQL password secret
+    # Create secrets
     local pg_password=$(openssl rand -base64 24 | tr -d '=+/' | head -c 24)
-    kubectl create secret generic keycloak-postgresql \
-        --namespace keycloak \
-        --from-literal=postgres-password="${pg_password}" \
-        --from-literal=password="${pg_password}" \
-        --dry-run=client -o yaml | kubectl apply -f -
 
-    # Install PostgreSQL for Keycloak first
+    # Deploy Keycloak directly without helm (avoids chart configuration issues)
     cat <<EOF | kubectl apply -f -
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-credentials
+  namespace: keycloak
+type: Opaque
+stringData:
+  admin-user: admin
+  admin-password: "${KEYCLOAK_ADMIN_PASSWORD}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-postgresql
+  namespace: keycloak
+type: Opaque
+stringData:
+  password: "${pg_password}"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -831,78 +836,95 @@ spec:
   - port: 5432
   selector:
     app: keycloak-postgresql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:24.0
+        args:
+        - start
+        - --hostname-strict=false
+        - --http-enabled=true
+        - --proxy=edge
+        - --cache=local
+        env:
+        - name: KEYCLOAK_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-credentials
+              key: admin-user
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-credentials
+              key: admin-password
+        - name: KC_DB
+          value: postgres
+        - name: KC_DB_URL
+          value: jdbc:postgresql://keycloak-postgresql:5432/keycloak
+        - name: KC_DB_USERNAME
+          value: postgres
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-postgresql
+              key: password
+        - name: KC_HEALTH_ENABLED
+          value: "true"
+        - name: KC_METRICS_ENABLED
+          value: "true"
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app: keycloak
 EOF
-
-    log_info "Waiting for PostgreSQL to be ready..."
-    kubectl wait --for=condition=available deployment/keycloak-postgresql -n keycloak --timeout=120s || true
-    sleep 5
-
-    # Create Keycloak values file
-    local keycloak_values="/tmp/keycloak-values.yaml"
-    cat > "${keycloak_values}" <<EOF
-image:
-  repository: quay.io/keycloak/keycloak
-  tag: "24.0"
-
-command:
-  - "/opt/keycloak/bin/kc.sh"
-
-args:
-  - "start"
-  - "--hostname-strict=false"
-  - "--http-enabled=true"
-
-# Override default cache settings - use local cache for single node
-# The chart defaults to jdbc-ping which isn't supported in Keycloak 24
-extraEnv: |
-  - name: KEYCLOAK_ADMIN
-    value: admin
-  - name: KEYCLOAK_ADMIN_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: keycloak-credentials
-        key: password
-  - name: KC_PROXY
-    value: edge
-  - name: KC_DB
-    value: postgres
-  - name: KC_DB_URL
-    value: jdbc:postgresql://keycloak-postgresql:5432/keycloak
-  - name: KC_DB_USERNAME
-    value: postgres
-  - name: KC_DB_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: keycloak-postgresql
-        key: password
-  - name: KC_CACHE
-    value: local
-  - name: KC_HTTP_RELATIVE_PATH
-    value: /
-
-dbchecker:
-  enabled: false
-
-# Disable the chart's default cache settings
-cache:
-  enabled: false
-
-resources:
-  requests:
-    memory: 512Mi
-    cpu: 250m
-EOF
-
-    # Install Keycloak using codecentric chart with official quay.io image
-    helm upgrade --install keycloak codecentric/keycloakx \
-        --namespace keycloak \
-        -f "${keycloak_values}" \
-        --timeout=600s
-
-    rm -f "${keycloak_values}"
 
     # Monitor Keycloak deployment
-    log_info "Waiting for Keycloak to be ready (this may take 5-10 minutes)..."
+    log_info "Waiting for Keycloak to be ready (this may take 3-5 minutes)..."
     local max_wait=600
     local elapsed=0
     local last_status_time=0
@@ -917,22 +939,20 @@ EOF
             last_status_time=$elapsed
         fi
 
-        # Check if Keycloak is ready (codecentric chart uses keycloakx label)
-        if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
-            if kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.containerStatuses[0].ready}' 2>/dev/null | grep -q "true"; then
-                echo ""
-                log_info "Keycloak is ready!"
-                break
-            fi
+        # Check if Keycloak is ready
+        if kubectl get deployment keycloak -n keycloak -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "1"; then
+            echo ""
+            log_info "Keycloak is ready!"
+            break
         fi
 
         # Check for crash loops or errors
-        local pod_status=$(kubectl get pods -n keycloak -l app.kubernetes.io/name=keycloakx -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+        local pod_status=$(kubectl get pods -n keycloak -l app=keycloak -o jsonpath='{.items[0].status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
         if [[ "$pod_status" == "CrashLoopBackOff" ]] || [[ "$pod_status" == "Error" ]] || [[ "$pod_status" == "ImagePullBackOff" ]]; then
             echo ""
             log_error "Keycloak pod is in $pod_status state"
-            kubectl describe pods -n keycloak -l app.kubernetes.io/name=keycloakx 2>/dev/null | tail -20 || true
-            kubectl logs -n keycloak -l app.kubernetes.io/name=keycloakx --tail=30 2>/dev/null || true
+            kubectl describe pods -n keycloak -l app=keycloak 2>/dev/null | tail -30 || true
+            kubectl logs -n keycloak -l app=keycloak --tail=50 2>/dev/null || true
             exit 1
         fi
 
@@ -961,7 +981,7 @@ spec:
   http:
     - route:
         - destination:
-            host: keycloak-keycloakx-http
+            host: keycloak
             port:
               number: 80
 EOF
