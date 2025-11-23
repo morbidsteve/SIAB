@@ -1018,6 +1018,7 @@ install_minio() {
 
     # Install MinIO (persistence disabled for single-node setup without storage provisioner)
     # Don't use --wait as post-install jobs can hang with Istio sidecars
+    # Use --set-string for annotation to ensure it's a string not boolean
     helm upgrade --install minio minio/minio \
         --namespace minio \
         --set rootUser="${MINIO_ROOT_USER}" \
@@ -1030,7 +1031,7 @@ install_minio() {
         --set securityContext.runAsGroup=1000 \
         --set securityContext.fsGroup=1000 \
         --set consoleService.type=ClusterIP \
-        --set postJob.podAnnotations."sidecar\.istio\.io/inject"=false \
+        --set-string 'postJob.podAnnotations.sidecar\.istio\.io/inject=false' \
         --timeout=600s
 
     # Wait for MinIO deployment to be ready
