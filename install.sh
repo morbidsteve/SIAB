@@ -1017,8 +1017,7 @@ install_minio() {
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Install MinIO (persistence disabled for single-node setup without storage provisioner)
-    # Don't use --wait as post-install jobs can hang with Istio sidecars
-    # Use --set-string for annotation to ensure it's a string not boolean
+    # Disable post-job as it can hang waiting for MinIO to be ready
     helm upgrade --install minio minio/minio \
         --namespace minio \
         --set rootUser="${MINIO_ROOT_USER}" \
@@ -1031,7 +1030,7 @@ install_minio() {
         --set securityContext.runAsGroup=1000 \
         --set securityContext.fsGroup=1000 \
         --set consoleService.type=ClusterIP \
-        --set-string 'postJob.podAnnotations.sidecar\.istio\.io/inject=false' \
+        --set postJob.enabled=false \
         --timeout=600s
 
     # Wait for MinIO deployment to be ready
