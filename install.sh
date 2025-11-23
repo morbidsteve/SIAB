@@ -1001,6 +1001,14 @@ install_minio() {
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
+    # Clean up any existing/stuck MinIO installation
+    log_info "Cleaning up any existing MinIO installation..."
+    helm uninstall minio -n minio 2>/dev/null || true
+    kubectl delete jobs --all -n minio 2>/dev/null || true
+    kubectl delete pods --all -n minio --force --grace-period=0 2>/dev/null || true
+    kubectl delete pvc --all -n minio 2>/dev/null || true
+    sleep 3
+
     # Create MinIO secret
     kubectl create secret generic minio-creds \
         --namespace minio \
