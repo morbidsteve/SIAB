@@ -1526,6 +1526,13 @@ install_siab_tools() {
         log_info "siab-uninstall command installed"
     fi
 
+    # Install fix-istio-routing script
+    if [[ -f "${SIAB_REPO_DIR}/fix-istio-routing.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/fix-istio-routing.sh" "${SIAB_BIN_DIR}/siab-fix-istio"
+        chmod +x "${SIAB_BIN_DIR}/siab-fix-istio"
+        log_info "siab-fix-istio command installed"
+    fi
+
     log_info "SIAB tools installed"
 }
 
@@ -1865,6 +1872,7 @@ print_completion() {
     echo "  siab-status              - View SIAB platform status"
     echo "  siab-info                - Show access URLs & credentials"
     echo "  siab-fix-rke2            - Troubleshoot RKE2 issues"
+    echo "  siab-fix-istio           - Fix Istio routing issues"
     echo "  siab-uninstall           - Remove SIAB completely"
     echo ""
     echo -e "${BLUE}▸ Kubernetes Commands${NC}"

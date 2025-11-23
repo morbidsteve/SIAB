@@ -134,13 +134,21 @@ else
 fi
 
 # Quick commands
-echo -e "${BLUE}▸ Quick Commands${NC}"
+echo -e "${BLUE}▸ SIAB Commands${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
-echo "  siab-status    - View platform health status"
-echo "  siab-info      - Show this access information"
-echo "  k9s            - Interactive cluster UI (terminal)"
+echo "  siab-status      - View platform health status"
+echo "  siab-info        - Show this access information"
+echo "  siab-fix-rke2    - Troubleshoot RKE2 issues"
+echo "  siab-fix-istio   - Fix Istio routing issues"
+echo "  siab-uninstall   - Remove SIAB completely"
+echo ""
+echo -e "${BLUE}▸ Kubernetes Commands${NC}"
+echo "  ─────────────────────────────────────────────────────────────"
+echo ""
+echo "  k9s              - Interactive cluster UI (terminal)"
 echo "  kubectl get pods -A   - List all pods"
+echo "  helm list -A     - List installed Helm charts"
 echo ""
 
 echo -e "${CYAN}════════════════════════════════════════════════════════════════${NC}"
