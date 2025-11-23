@@ -152,6 +152,37 @@ setup_directories() {
     chmod 700 "${SIAB_CONFIG_DIR}"
 }
 
+# Clone or update SIAB repository
+clone_siab_repo() {
+    log_step "Fetching SIAB repository..."
+
+    local SIAB_REPO_URL="https://github.com/morbidsteve/SIAB.git"
+    local SIAB_REPO_DIR="${SIAB_DIR}/repo"
+
+    # Check if we're already running from a cloned repo
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "${script_dir}/siab-status.sh" ]] && [[ -d "${script_dir}/crds" ]]; then
+        log_info "Running from existing repo clone, using local files..."
+        SIAB_REPO_DIR="${script_dir}"
+    else
+        # Need to clone the repo
+        if [[ -d "${SIAB_REPO_DIR}/.git" ]]; then
+            log_info "Updating existing SIAB repository..."
+            cd "${SIAB_REPO_DIR}"
+            git pull origin main 2>/dev/null || git pull 2>/dev/null || true
+            cd - >/dev/null
+        else
+            log_info "Cloning SIAB repository..."
+            rm -rf "${SIAB_REPO_DIR}"
+            git clone --depth 1 "${SIAB_REPO_URL}" "${SIAB_REPO_DIR}"
+        fi
+    fi
+
+    # Export the repo dir for other functions to use
+    export SIAB_REPO_DIR
+    log_info "SIAB repo available at: ${SIAB_REPO_DIR}"
+}
+
 # Install system dependencies
 install_dependencies() {
     log_step "Installing system dependencies..."
@@ -1414,18 +1445,35 @@ install_siab_tools() {
     log_step "Installing SIAB management tools..."
 
     # Install siab-status script
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -f "${script_dir}/siab-status.sh" ]]; then
-        cp "${script_dir}/siab-status.sh" "${SIAB_BIN_DIR}/siab-status"
+    if [[ -f "${SIAB_REPO_DIR}/siab-status.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/siab-status.sh" "${SIAB_BIN_DIR}/siab-status"
         chmod +x "${SIAB_BIN_DIR}/siab-status"
         log_info "siab-status command installed"
+    else
+        log_warn "siab-status.sh not found in repo"
     fi
 
     # Install siab-info script
-    if [[ -f "${script_dir}/siab-info.sh" ]]; then
-        cp "${script_dir}/siab-info.sh" "${SIAB_BIN_DIR}/siab-info"
+    if [[ -f "${SIAB_REPO_DIR}/siab-info.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/siab-info.sh" "${SIAB_BIN_DIR}/siab-info"
         chmod +x "${SIAB_BIN_DIR}/siab-info"
         log_info "siab-info command installed"
+    else
+        log_warn "siab-info.sh not found in repo"
+    fi
+
+    # Install fix-rke2 script
+    if [[ -f "${SIAB_REPO_DIR}/fix-rke2.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/fix-rke2.sh" "${SIAB_BIN_DIR}/siab-fix-rke2"
+        chmod +x "${SIAB_BIN_DIR}/siab-fix-rke2"
+        log_info "siab-fix-rke2 command installed"
+    fi
+
+    # Install uninstall script
+    if [[ -f "${SIAB_REPO_DIR}/uninstall.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/uninstall.sh" "${SIAB_BIN_DIR}/siab-uninstall"
+        chmod +x "${SIAB_BIN_DIR}/siab-uninstall"
+        log_info "siab-uninstall command installed"
     fi
 
     log_info "SIAB tools installed"
@@ -1465,6 +1513,14 @@ spec:
           port: 53
 EOF
 
+    # Apply additional security policies from repo if available
+    if [[ -d "${SIAB_REPO_DIR}/manifests/security" ]]; then
+        log_info "Applying additional security policies..."
+        kubectl apply -f "${SIAB_REPO_DIR}/manifests/security/" 2>/dev/null || {
+            log_warn "Some security policies may have failed to apply (gatekeeper constraints need templates first)"
+        }
+    fi
+
     log_info "Security policies applied"
 }
 
@@ -1472,9 +1528,23 @@ EOF
 install_siab_crds() {
     log_step "Installing SIAB Custom Resource Definitions..."
 
-    # Copy CRDs from install location
-    if [[ -d "${SIAB_DIR}/crds" ]]; then
-        kubectl apply -f "${SIAB_DIR}/crds/"
+    # Install CRDs from repo
+    if [[ -d "${SIAB_REPO_DIR}/crds" ]]; then
+        kubectl apply -f "${SIAB_REPO_DIR}/crds/"
+        log_info "SIAB CRDs installed from ${SIAB_REPO_DIR}/crds/"
+    else
+        log_warn "CRDs directory not found, skipping CRD installation"
+    fi
+
+    # Copy CRDs to SIAB directory for reference
+    if [[ -d "${SIAB_REPO_DIR}/crds" ]]; then
+        cp -r "${SIAB_REPO_DIR}/crds" "${SIAB_DIR}/"
+    fi
+
+    # Copy examples for reference
+    if [[ -d "${SIAB_REPO_DIR}/examples" ]]; then
+        cp -r "${SIAB_REPO_DIR}/examples" "${SIAB_DIR}/"
+        log_info "Example manifests copied to ${SIAB_DIR}/examples/"
     fi
 
     log_info "SIAB CRDs installed"
@@ -1484,12 +1554,24 @@ install_siab_crds() {
 install_dashboard() {
     log_step "Installing SIAB Dashboard..."
 
-    # Deploy dashboard
-    if [[ -d "${SIAB_DIR}/manifests/apps" ]]; then
-        kubectl apply -f "${SIAB_DIR}/manifests/apps/dashboard.yaml"
+    # Deploy dashboard from repo if available
+    if [[ -f "${SIAB_REPO_DIR}/manifests/apps/dashboard.yaml" ]]; then
+        # Check if the dashboard image exists before deploying
+        log_info "Deploying SIAB dashboard..."
+        kubectl apply -f "${SIAB_REPO_DIR}/manifests/apps/dashboard.yaml" 2>/dev/null || {
+            log_warn "Dashboard deployment skipped (image may not be available yet)"
+        }
+    else
+        log_info "Dashboard manifest not found, skipping custom dashboard"
     fi
 
-    log_info "Dashboard installed"
+    # Copy manifests to SIAB directory for reference
+    if [[ -d "${SIAB_REPO_DIR}/manifests" ]]; then
+        cp -r "${SIAB_REPO_DIR}/manifests" "${SIAB_DIR}/"
+        log_info "Manifests copied to ${SIAB_DIR}/manifests/"
+    fi
+
+    log_info "Dashboard setup complete"
 }
 
 # Create Istio Gateway
@@ -1663,11 +1745,18 @@ print_completion() {
     echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}:${ingress_port}"
     echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}:${ingress_port}"
     echo ""
-    echo -e "${BLUE}▸ Quick Commands${NC}"
+    echo -e "${BLUE}▸ SIAB Commands${NC}"
     echo "  ─────────────────────────────────────────"
     echo "  siab-status              - View SIAB platform status"
+    echo "  siab-info                - Show access URLs & credentials"
+    echo "  siab-fix-rke2            - Troubleshoot RKE2 issues"
+    echo "  siab-uninstall           - Remove SIAB completely"
+    echo ""
+    echo -e "${BLUE}▸ Kubernetes Commands${NC}"
+    echo "  ─────────────────────────────────────────"
     echo "  k9s                      - Interactive cluster UI (terminal)"
     echo "  kubectl get pods -A      - List all pods"
+    echo "  helm list -A             - List installed Helm charts"
     echo ""
     echo -e "${BLUE}▸ Credentials${NC}"
     echo "  ─────────────────────────────────────────"
@@ -1712,6 +1801,7 @@ main() {
     exec > >(tee -a "${SIAB_LOG_DIR}/install.log") 2>&1
 
     install_dependencies
+    clone_siab_repo          # Clone repo after git is installed
     configure_firewall
     configure_security
     install_rke2
@@ -1731,6 +1821,7 @@ main() {
     install_siab_tools
     apply_security_policies
     install_siab_crds
+    install_dashboard        # Install SIAB dashboard
     final_configuration
     print_completion
 
