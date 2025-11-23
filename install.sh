@@ -1364,6 +1364,13 @@ install_siab_tools() {
         log_info "siab-status command installed"
     fi
 
+    # Install siab-info script
+    if [[ -f "${script_dir}/siab-info.sh" ]]; then
+        cp "${script_dir}/siab-info.sh" "${SIAB_BIN_DIR}/siab-info"
+        chmod +x "${SIAB_BIN_DIR}/siab-info"
+        log_info "siab-info command installed"
+    fi
+
     log_info "SIAB tools installed"
 }
 
