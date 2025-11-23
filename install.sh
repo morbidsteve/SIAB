@@ -1458,14 +1458,16 @@ spec:
         credentialName: siab-gateway-cert
       hosts:
         - "*.${SIAB_DOMAIN}"
+        - "${SIAB_DOMAIN}"
+        - "*"
     - port:
         number: 80
         name: http
         protocol: HTTP
       hosts:
         - "*.${SIAB_DOMAIN}"
-      tls:
-        httpsRedirect: true
+        - "${SIAB_DOMAIN}"
+        - "*"
 EOF
 
     # Create certificate for gateway
