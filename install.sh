@@ -787,9 +787,11 @@ install_istio() {
 
     # Install Istio ingress gateway
     # Note: We use ClusterIP service and add hostPort via patch for standard ports (80/443)
+    # replicaCount=1 is required because hostPort can only bind once per node
     helm upgrade --install istio-ingress istio/gateway \
         --namespace istio-system \
         --version ${ISTIO_VERSION} \
+        --set replicaCount=1 \
         --set service.type=ClusterIP \
         --set "service.ports[0].name=http" \
         --set "service.ports[0].port=80" \

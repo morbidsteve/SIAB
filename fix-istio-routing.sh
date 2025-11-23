@@ -219,6 +219,9 @@ EOF
 # Step 5: Patch ingress gateway to use hostPort for standard ports
 log_info "Patching Istio ingress gateway for standard ports (80/443)..."
 
+# Scale to 1 replica (hostPort can only bind once per node)
+kubectl scale deployment istio-ingress -n istio-system --replicas=1
+
 # Update the service to ClusterIP (we'll use hostPort instead of NodePort)
 kubectl patch svc istio-ingress -n istio-system --type='json' -p='[
   {"op": "replace", "path": "/spec/type", "value": "ClusterIP"}
