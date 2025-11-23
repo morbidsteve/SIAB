@@ -1167,12 +1167,15 @@ install_monitoring() {
     # Load credentials for Grafana
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
-    # Disable Istio sidecar injection for monitoring namespace FIRST
+    # Disable Istio sidecar injection for monitoring namespace FIRST (before any cleanup)
+    # This ensures any new pods created won't get sidecars injected
     kubectl label namespace monitoring istio-injection=disabled --overwrite 2>/dev/null || true
 
     # Clean up any existing monitoring installation thoroughly
     log_info "Cleaning up any existing monitoring installation..."
-    helm uninstall kube-prometheus-stack -n monitoring 2>/dev/null || true
+
+    # First, uninstall the helm release
+    helm uninstall kube-prometheus-stack -n monitoring --wait 2>/dev/null || true
 
     # Force delete any stuck jobs (admission jobs can get stuck with Istio sidecars)
     for job in $(kubectl get jobs -n monitoring -o name 2>/dev/null); do
@@ -1180,14 +1183,31 @@ install_monitoring() {
         kubectl delete "$job" -n monitoring --force --grace-period=0 2>/dev/null || true
     done
 
-    # Kill any pods that might be hanging
+    # Kill any pods that might be hanging (especially with Istio sidecars that won't exit)
     for pod in $(kubectl get pods -n monitoring -o name 2>/dev/null); do
         log_info "Force removing pod: $pod"
         kubectl delete "$pod" -n monitoring --force --grace-period=0 2>/dev/null || true
     done
 
+    # Delete any PVCs
     kubectl delete pvc --all -n monitoring 2>/dev/null || true
-    sleep 3
+
+    # Wait for everything to be gone
+    log_info "Waiting for monitoring cleanup to complete..."
+    local cleanup_timeout=60
+    local cleanup_elapsed=0
+    while [[ $cleanup_elapsed -lt $cleanup_timeout ]]; do
+        local remaining_pods=$(kubectl get pods -n monitoring --no-headers 2>/dev/null | wc -l)
+        if [[ "$remaining_pods" -eq 0 ]]; then
+            break
+        fi
+        sleep 2
+        cleanup_elapsed=$((cleanup_elapsed + 2))
+    done
+
+    # Final force cleanup if anything remains
+    kubectl delete pods --all -n monitoring --force --grace-period=0 2>/dev/null || true
+    sleep 2
 
     # Install kube-prometheus-stack (Prometheus, Grafana, AlertManager)
     helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
