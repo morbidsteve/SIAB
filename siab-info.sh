@@ -25,10 +25,8 @@ if [[ -f /etc/rancher/rke2/rke2.yaml ]] && [[ ! -f ~/.kube/config ]]; then
     export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 fi
 
-# Get node IP and ports
+# Get node IP
 NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
-HTTPS_PORT=$(kubectl get svc -n istio-system istio-ingress -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null)
-HTTP_PORT=$(kubectl get svc -n istio-system istio-ingress -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null)
 
 # Get domain from config
 SIAB_DOMAIN="siab.local"
@@ -47,20 +45,24 @@ echo ""
 echo -e "${BLUE}▸ Add to /etc/hosts (on your client machine)${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
-echo -e "  ${GREEN}${NODE_IP} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN}${NC}"
+echo -e "  ${GREEN}${NODE_IP} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}${NC}"
 echo ""
 echo "  Windows: C:\\Windows\\System32\\drivers\\etc\\hosts"
 echo "  Linux/Mac: /etc/hosts"
 echo ""
 
-# Web URLs
-echo -e "${BLUE}▸ Web Interfaces${NC}"
+# Web URLs - Now using standard ports (80/443) via hostPort
+echo -e "${BLUE}▸ Web Interfaces (standard HTTPS port 443)${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
-echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}:${HTTPS_PORT}"
-echo "  Kubernetes Dashboard:    https://dashboard.${SIAB_DOMAIN}:${HTTPS_PORT}"
-echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}:${HTTPS_PORT}"
-echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}:${HTTPS_PORT}"
+echo "  SIAB Dashboard:          https://dashboard.${SIAB_DOMAIN}"
+echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}"
+echo "  Kubernetes Dashboard:    https://k8s-dashboard.${SIAB_DOMAIN}"
+echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}"
+echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}"
+echo "  App Catalog:             https://catalog.${SIAB_DOMAIN}"
+echo ""
+echo -e "${YELLOW}Note: Accept the self-signed certificate warning in your browser${NC}"
 echo ""
 
 # Direct IP access (port-forward alternative)

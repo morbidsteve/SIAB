@@ -185,16 +185,16 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: catalog
-  namespace: siab-catalog
+  namespace: istio-system
 spec:
   hosts:
     - "catalog.siab.local"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - route:
         - destination:
-            host: catalog-frontend
+            host: catalog-frontend.siab-catalog.svc.cluster.local
             port:
               number: 80
 ---

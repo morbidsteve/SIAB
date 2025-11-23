@@ -730,12 +730,36 @@ install_istio() {
     # Wait for Istio to be ready
     kubectl wait --for=condition=Available deployment --all -n istio-system --timeout=300s
 
-    # Install Istio ingress gateway
+    # Install Istio ingress gateway with hostPort for standard ports (80/443)
     helm upgrade --install istio-ingress istio/gateway \
         --namespace istio-system \
         --version ${ISTIO_VERSION} \
-        --set service.type=NodePort \
+        --set service.type=ClusterIP \
+        --set "service.ports[0].name=http" \
+        --set "service.ports[0].port=80" \
+        --set "service.ports[0].targetPort=80" \
+        --set "service.ports[1].name=https" \
+        --set "service.ports[1].port=443" \
+        --set "service.ports[1].targetPort=443" \
+        --set "containerPorts[0].containerPort=80" \
+        --set "containerPorts[0].hostPort=80" \
+        --set "containerPorts[0].protocol=TCP" \
+        --set "containerPorts[1].containerPort=443" \
+        --set "containerPorts[1].hostPort=443" \
+        --set "containerPorts[1].protocol=TCP" \
         --wait
+
+    # Patch the deployment to ensure hostPort binding
+    kubectl patch deployment istio-ingress -n istio-system --type='json' -p='[
+      {"op": "replace", "path": "/spec/template/spec/containers/0/ports", "value": [
+        {"containerPort": 80, "hostPort": 80, "protocol": "TCP", "name": "http"},
+        {"containerPort": 443, "hostPort": 443, "protocol": "TCP", "name": "https"},
+        {"containerPort": 15090, "protocol": "TCP", "name": "http-envoy-prom"}
+      ]}
+    ]' || true
+
+    # Wait for gateway to be ready after patch
+    kubectl rollout status deployment/istio-ingress -n istio-system --timeout=120s
 
     # Apply strict mTLS policy
     cat <<EOF | kubectl apply -f -
@@ -969,12 +993,13 @@ EOF
     fi
 
     # Create DestinationRule to disable mTLS for Keycloak (no sidecar)
+    # NOTE: DestinationRule must be in istio-system where the gateway runs
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: keycloak-disable-mtls
-  namespace: keycloak
+  namespace: istio-system
 spec:
   host: keycloak.keycloak.svc.cluster.local
   trafficPolicy:
@@ -988,12 +1013,12 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: keycloak
-  namespace: keycloak
+  namespace: istio-system
 spec:
   hosts:
     - "keycloak.${SIAB_DOMAIN}"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - route:
         - destination:
@@ -1108,14 +1133,26 @@ install_minio() {
     fi
 
     # Create DestinationRule to disable mTLS for MinIO (no sidecar)
+    # NOTE: DestinationRule must be in istio-system where the gateway runs
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: minio-disable-mtls
-  namespace: minio
+  namespace: istio-system
 spec:
   host: minio-console.minio.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: minio-api-disable-mtls
+  namespace: istio-system
+spec:
+  host: minio.minio.svc.cluster.local
   trafficPolicy:
     tls:
       mode: DISABLE
@@ -1127,12 +1164,12 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: minio-console
-  namespace: minio
+  namespace: istio-system
 spec:
   hosts:
     - "minio.${SIAB_DOMAIN}"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - route:
         - destination:
@@ -1276,14 +1313,26 @@ install_monitoring() {
     done
 
     # Create DestinationRule to disable mTLS for monitoring services (they don't have sidecars)
+    # NOTE: DestinationRule must be in istio-system where the gateway runs
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
   name: grafana-disable-mtls
-  namespace: monitoring
+  namespace: istio-system
 spec:
   host: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: prometheus-disable-mtls
+  namespace: istio-system
+spec:
+  host: kube-prometheus-stack-prometheus.monitoring.svc.cluster.local
   trafficPolicy:
     tls:
       mode: DISABLE
@@ -1295,13 +1344,12 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: grafana
-  namespace: monitoring
+  namespace: istio-system
 spec:
   hosts:
     - "grafana.${SIAB_DOMAIN}"
-    - "grafana"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - route:
         - destination:
@@ -1373,12 +1421,13 @@ type: kubernetes.io/service-account-token
 EOF
 
     # Create DestinationRule to disable mTLS for Dashboard (no sidecar)
+    # NOTE: DestinationRule must be in istio-system where the gateway runs
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
-  name: dashboard-disable-mtls
-  namespace: kubernetes-dashboard
+  name: k8s-dashboard-disable-mtls
+  namespace: istio-system
 spec:
   host: kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local
   trafficPolicy:
@@ -1386,18 +1435,19 @@ spec:
       mode: DISABLE
 EOF
 
-    # Create Istio VirtualService for Dashboard
+    # Create Istio VirtualService for Kubernetes Dashboard
+    # Using k8s-dashboard.${SIAB_DOMAIN} to avoid conflict with SIAB Dashboard
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: kubernetes-dashboard
-  namespace: kubernetes-dashboard
+  namespace: istio-system
 spec:
   hosts:
-    - "dashboard.${SIAB_DOMAIN}"
+    - "k8s-dashboard.${SIAB_DOMAIN}"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - route:
         - destination:
@@ -1545,7 +1595,70 @@ spec:
     - "${SIAB_DOMAIN}"
 EOF
 
-    log_info "Istio Gateway created"
+    # Create RequestAuthentication for JWT validation from Keycloak
+    # This allows but doesn't require JWT tokens - AuthorizationPolicy enforces requirements
+    cat <<EOF | kubectl apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-auth
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress
+  jwtRules:
+    - issuer: "https://keycloak.${SIAB_DOMAIN}/realms/siab"
+      jwksUri: "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
+      forwardOriginalToken: true
+      outputPayloadToHeader: x-jwt-payload
+EOF
+
+    # Create AuthorizationPolicy to allow unauthenticated access to Keycloak
+    # (users need to access Keycloak to authenticate)
+    cat <<EOF | kubectl apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-keycloak-unauthenticated
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - "keycloak.${SIAB_DOMAIN}"
+              - "keycloak.${SIAB_DOMAIN}:*"
+EOF
+
+    # Create AuthorizationPolicy to allow unauthenticated access to the main dashboard
+    # (landing page should be accessible to see what services are available)
+    cat <<EOF | kubectl apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-dashboard-unauthenticated
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - "${SIAB_DOMAIN}"
+              - "${SIAB_DOMAIN}:*"
+              - "dashboard.${SIAB_DOMAIN}"
+              - "dashboard.${SIAB_DOMAIN}:*"
+EOF
+
+    log_info "Istio Gateway and authentication created"
 }
 
 # Final configuration
@@ -1582,6 +1695,8 @@ ${node_ip} keycloak.${SIAB_DOMAIN}
 ${node_ip} minio.${SIAB_DOMAIN}
 ${node_ip} grafana.${SIAB_DOMAIN}
 ${node_ip} dashboard.${SIAB_DOMAIN}
+${node_ip} k8s-dashboard.${SIAB_DOMAIN}
+${node_ip} catalog.${SIAB_DOMAIN}
 EOF
     fi
 

@@ -87,20 +87,20 @@ apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: siab-dashboard
-  namespace: siab-system
+  namespace: istio-system
 spec:
   hosts:
     - "dashboard.siab.local"
     - "siab.local"
   gateways:
-    - istio-system/siab-gateway
+    - siab-gateway
   http:
     - match:
         - uri:
             prefix: /
       route:
         - destination:
-            host: siab-dashboard
+            host: siab-dashboard.siab-system.svc.cluster.local
             port:
               number: 80
 ---
