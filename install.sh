@@ -621,7 +621,31 @@ install_k9s() {
     chmod +x "${SIAB_BIN_DIR}/k9s"
     cd - >/dev/null
 
+    # Ensure SIAB bin directory is in PATH for all users
+    cat > /etc/profile.d/siab.sh <<'EOF'
+# SIAB - Secure Infrastructure as a Box
+# Add SIAB and Kubernetes tools to PATH
+export PATH="${PATH}:/usr/local/bin:/var/lib/rancher/rke2/bin"
+export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
+EOF
+    chmod +x /etc/profile.d/siab.sh
+
+    # Also add to /etc/environment for non-login shells
+    if ! grep -q "/usr/local/bin" /etc/environment 2>/dev/null; then
+        if [[ -f /etc/environment ]]; then
+            # Update existing PATH in /etc/environment
+            if grep -q "^PATH=" /etc/environment; then
+                sed -i 's|^PATH="\(.*\)"|PATH="\1:/usr/local/bin:/var/lib/rancher/rke2/bin"|' /etc/environment
+            else
+                echo 'PATH="/usr/local/bin:/var/lib/rancher/rke2/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"' >> /etc/environment
+            fi
+        else
+            echo 'PATH="/usr/local/bin:/var/lib/rancher/rke2/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"' > /etc/environment
+        fi
+    fi
+
     log_info "k9s installed at ${SIAB_BIN_DIR}/k9s"
+    log_info "PATH configured in /etc/profile.d/siab.sh"
 }
 
 # Generate secure credentials
@@ -761,7 +785,8 @@ install_istio() {
     # Wait for Istio to be ready
     kubectl wait --for=condition=Available deployment --all -n istio-system --timeout=300s
 
-    # Install Istio ingress gateway with hostPort for standard ports (80/443)
+    # Install Istio ingress gateway
+    # Note: We use ClusterIP service and add hostPort via patch for standard ports (80/443)
     helm upgrade --install istio-ingress istio/gateway \
         --namespace istio-system \
         --version ${ISTIO_VERSION} \
@@ -772,22 +797,18 @@ install_istio() {
         --set "service.ports[1].name=https" \
         --set "service.ports[1].port=443" \
         --set "service.ports[1].targetPort=443" \
-        --set "containerPorts[0].containerPort=80" \
-        --set "containerPorts[0].hostPort=80" \
-        --set "containerPorts[0].protocol=TCP" \
-        --set "containerPorts[1].containerPort=443" \
-        --set "containerPorts[1].hostPort=443" \
-        --set "containerPorts[1].protocol=TCP" \
         --wait
 
-    # Patch the deployment to ensure hostPort binding
+    # Patch the deployment to add hostPort binding for standard ports (80/443)
+    # This allows direct access without NodePort high ports
+    log_info "Configuring hostPort for standard ports 80/443..."
     kubectl patch deployment istio-ingress -n istio-system --type='json' -p='[
       {"op": "replace", "path": "/spec/template/spec/containers/0/ports", "value": [
         {"containerPort": 80, "hostPort": 80, "protocol": "TCP", "name": "http"},
         {"containerPort": 443, "hostPort": 443, "protocol": "TCP", "name": "https"},
         {"containerPort": 15090, "protocol": "TCP", "name": "http-envoy-prom"}
       ]}
-    ]' || true
+    ]'
 
     # Wait for gateway to be ready after patch
     kubectl rollout status deployment/istio-ingress -n istio-system --timeout=120s
