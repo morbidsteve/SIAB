@@ -1009,6 +1009,9 @@ install_minio() {
     kubectl delete pvc --all -n minio 2>/dev/null || true
     sleep 3
 
+    # Disable Istio sidecar injection for minio namespace (simplifies setup)
+    kubectl label namespace minio istio-injection=disabled --overwrite 2>/dev/null || true
+
     # Create MinIO secret
     kubectl create secret generic minio-creds \
         --namespace minio \
