@@ -77,7 +77,160 @@ readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly MAGENTA='\033[0;35m'
+readonly BOLD='\033[1m'
+readonly DIM='\033[2m'
 readonly NC='\033[0m' # No Color
+
+# Status tracking symbols
+readonly SYMBOL_PENDING="○"
+readonly SYMBOL_RUNNING="◐"
+readonly SYMBOL_DONE="●"
+readonly SYMBOL_SKIP="◌"
+readonly SYMBOL_FAIL="✗"
+
+# Installation steps for status tracking
+declare -a INSTALL_STEPS=(
+    "System Requirements"
+    "System Dependencies"
+    "Repository Clone"
+    "Firewall Configuration"
+    "Security Configuration"
+    "RKE2 Kubernetes"
+    "Helm Package Manager"
+    "k9s Cluster UI"
+    "Credentials Generation"
+    "Kubernetes Namespaces"
+    "cert-manager"
+    "MetalLB Load Balancer"
+    "Istio Service Mesh"
+    "Istio Gateways"
+    "Keycloak Identity"
+    "MinIO Storage"
+    "Trivy Security Scanner"
+    "OPA Gatekeeper"
+    "Monitoring Stack"
+    "Kubernetes Dashboard"
+    "SIAB Tools"
+    "Security Policies"
+    "SIAB CRDs"
+    "SIAB Dashboard"
+    "Final Configuration"
+)
+
+# Status for each step: pending, running, done, skipped, failed
+declare -A STEP_STATUS
+declare -A STEP_MESSAGE
+
+# Initialize all steps as pending
+init_step_status() {
+    for step in "${INSTALL_STEPS[@]}"; do
+        STEP_STATUS["$step"]="pending"
+        STEP_MESSAGE["$step"]=""
+    done
+}
+
+# Update step status
+set_step_status() {
+    local step="$1"
+    local status="$2"
+    local message="${3:-}"
+    STEP_STATUS["$step"]="$status"
+    STEP_MESSAGE["$step"]="$message"
+}
+
+# Print the full status dashboard
+print_status_dashboard() {
+    local current_step="${1:-}"
+
+    echo ""
+    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║              SIAB Installation Progress                        ║${NC}"
+    echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    local col1_steps=()
+    local col2_steps=()
+    local half=$((${#INSTALL_STEPS[@]} / 2 + ${#INSTALL_STEPS[@]} % 2))
+
+    for i in "${!INSTALL_STEPS[@]}"; do
+        if [[ $i -lt $half ]]; then
+            col1_steps+=("${INSTALL_STEPS[$i]}")
+        else
+            col2_steps+=("${INSTALL_STEPS[$i]}")
+        fi
+    done
+
+    for i in "${!col1_steps[@]}"; do
+        local step1="${col1_steps[$i]}"
+        local step2="${col2_steps[$i]:-}"
+
+        # Format step 1
+        local status1="${STEP_STATUS[$step1]:-pending}"
+        local symbol1 color1
+        case "$status1" in
+            pending) symbol1="$SYMBOL_PENDING"; color1="$DIM" ;;
+            running) symbol1="$SYMBOL_RUNNING"; color1="$CYAN" ;;
+            done)    symbol1="$SYMBOL_DONE"; color1="$GREEN" ;;
+            skipped) symbol1="$SYMBOL_SKIP"; color1="$YELLOW" ;;
+            failed)  symbol1="$SYMBOL_FAIL"; color1="$RED" ;;
+        esac
+
+        printf "  ${color1}%s %-28s${NC}" "$symbol1" "$step1"
+
+        # Format step 2 if exists
+        if [[ -n "$step2" ]]; then
+            local status2="${STEP_STATUS[$step2]:-pending}"
+            local symbol2 color2
+            case "$status2" in
+                pending) symbol2="$SYMBOL_PENDING"; color2="$DIM" ;;
+                running) symbol2="$SYMBOL_RUNNING"; color2="$CYAN" ;;
+                done)    symbol2="$SYMBOL_DONE"; color2="$GREEN" ;;
+                skipped) symbol2="$SYMBOL_SKIP"; color2="$YELLOW" ;;
+                failed)  symbol2="$SYMBOL_FAIL"; color2="$RED" ;;
+            esac
+            printf "  ${color2}%s %-28s${NC}" "$symbol2" "$step2"
+        fi
+        echo ""
+    done
+
+    echo ""
+    echo -e "  ${DIM}Legend: ${SYMBOL_PENDING} Pending  ${SYMBOL_RUNNING} Running  ${SYMBOL_DONE} Done  ${SYMBOL_SKIP} Skipped  ${SYMBOL_FAIL} Failed${NC}"
+    echo ""
+}
+
+# Start a step (mark as running and print status)
+start_step() {
+    local step="$1"
+    set_step_status "$step" "running"
+    print_status_dashboard "$step"
+    log_step "Starting: $step..."
+}
+
+# Complete a step
+complete_step() {
+    local step="$1"
+    local message="${2:-}"
+    set_step_status "$step" "done" "$message"
+    log_info "$step completed"
+}
+
+# Skip a step
+skip_step() {
+    local step="$1"
+    local reason="${2:-Already configured}"
+    set_step_status "$step" "skipped" "$reason"
+    log_info "$step skipped: $reason"
+}
+
+# Fail a step
+fail_step() {
+    local step="$1"
+    local reason="${2:-Unknown error}"
+    set_step_status "$step" "failed" "$reason"
+    log_error "$step failed: $reason"
+}
 
 # Logging functions
 log_info() {
@@ -98,6 +251,239 @@ log_step() {
 
 # Error handling
 trap 'log_error "Installation failed at line $LINENO. Check ${SIAB_LOG_DIR}/install.log for details."' ERR
+
+# Initialize SIAB_REPO_DIR with a default value (will be updated by clone_siab_repo)
+SIAB_REPO_DIR="${SIAB_DIR}/repo"
+
+# ============================================================================
+# PRE-FLIGHT CHECK FUNCTIONS
+# These functions check if components are already installed correctly
+# ============================================================================
+
+# Check if RKE2 is already installed and working correctly
+check_rke2_installed() {
+    log_info "Checking RKE2 installation status..."
+
+    # Check if RKE2 binary exists
+    if [[ ! -f /var/lib/rancher/rke2/bin/kubectl ]]; then
+        log_info "RKE2 not installed (kubectl not found)"
+        return 1
+    fi
+
+    # Check if RKE2 service is running
+    if ! systemctl is-active --quiet rke2-server 2>/dev/null; then
+        log_warn "RKE2 service is not running"
+        return 1
+    fi
+
+    # Check if kubeconfig exists
+    if [[ ! -f /etc/rancher/rke2/rke2.yaml ]]; then
+        log_warn "RKE2 kubeconfig not found"
+        return 1
+    fi
+
+    # Check if we can communicate with the cluster
+    if ! /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes &>/dev/null; then
+        log_warn "Cannot communicate with Kubernetes cluster"
+        return 1
+    fi
+
+    # Check if node is Ready
+    local node_status
+    node_status=$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+    if [[ "$node_status" != "True" ]]; then
+        log_warn "Kubernetes node is not Ready (status: $node_status)"
+        return 1
+    fi
+
+    # Check if core components are running
+    local core_pods_running
+    core_pods_running=$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pods -n kube-system --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+    if [[ "$core_pods_running" -lt 5 ]]; then
+        log_warn "Not enough core pods running (found: $core_pods_running)"
+        return 1
+    fi
+
+    log_info "RKE2 is properly installed and running"
+    return 0
+}
+
+# Check if Helm is already installed correctly
+check_helm_installed() {
+    log_info "Checking Helm installation status..."
+
+    # Check if helm binary exists in expected location
+    if [[ ! -x "${SIAB_BIN_DIR}/helm" ]]; then
+        # Also check system PATH
+        if ! command -v helm &>/dev/null; then
+            log_info "Helm not installed"
+            return 1
+        fi
+    fi
+
+    # Verify helm works
+    local helm_cmd="${SIAB_BIN_DIR}/helm"
+    [[ ! -x "$helm_cmd" ]] && helm_cmd="helm"
+
+    if ! "$helm_cmd" version &>/dev/null; then
+        log_warn "Helm binary exists but not working"
+        return 1
+    fi
+
+    # Check if required repos are configured
+    local repos_ok=true
+    for repo in istio jetstack prometheus-community kubernetes-dashboard; do
+        if ! "$helm_cmd" repo list 2>/dev/null | grep -q "$repo"; then
+            log_info "Helm repo '$repo' not configured"
+            repos_ok=false
+            break
+        fi
+    done
+
+    if [[ "$repos_ok" == "false" ]]; then
+        log_warn "Helm repos not fully configured"
+        return 1
+    fi
+
+    log_info "Helm is properly installed with required repos"
+    return 0
+}
+
+# Check if k9s is already installed correctly
+check_k9s_installed() {
+    log_info "Checking k9s installation status..."
+
+    # Check if k9s binary exists in expected location
+    if [[ ! -x "${SIAB_BIN_DIR}/k9s" ]]; then
+        # Also check system PATH
+        if ! command -v k9s &>/dev/null; then
+            log_info "k9s not installed"
+            return 1
+        fi
+    fi
+
+    # Verify k9s works (just check version)
+    local k9s_cmd="${SIAB_BIN_DIR}/k9s"
+    [[ ! -x "$k9s_cmd" ]] && k9s_cmd="k9s"
+
+    if ! "$k9s_cmd" version &>/dev/null; then
+        log_warn "k9s binary exists but not working"
+        return 1
+    fi
+
+    log_info "k9s is properly installed"
+    return 0
+}
+
+# Check if cert-manager is already installed correctly
+check_cert_manager_installed() {
+    log_info "Checking cert-manager installation status..."
+
+    # Check if cert-manager namespace exists
+    if ! kubectl get namespace cert-manager &>/dev/null; then
+        return 1
+    fi
+
+    # Check if cert-manager deployments are ready
+    if ! kubectl get deployment cert-manager -n cert-manager &>/dev/null; then
+        return 1
+    fi
+
+    local ready_replicas
+    ready_replicas=$(kubectl get deployment cert-manager -n cert-manager -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    if [[ "$ready_replicas" -lt 1 ]]; then
+        return 1
+    fi
+
+    # Check if cluster issuer exists
+    if ! kubectl get clusterissuer siab-ca-issuer &>/dev/null; then
+        return 1
+    fi
+
+    log_info "cert-manager is properly installed"
+    return 0
+}
+
+# Check if MetalLB is already installed correctly
+check_metallb_installed() {
+    log_info "Checking MetalLB installation status..."
+
+    # Check if metallb-system namespace exists
+    if ! kubectl get namespace metallb-system &>/dev/null; then
+        return 1
+    fi
+
+    # Check if MetalLB controller is ready
+    if ! kubectl get deployment metallb-controller -n metallb-system &>/dev/null; then
+        return 1
+    fi
+
+    local ready_replicas
+    ready_replicas=$(kubectl get deployment metallb-controller -n metallb-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    if [[ "$ready_replicas" -lt 1 ]]; then
+        return 1
+    fi
+
+    # Check if IP address pools exist
+    if ! kubectl get ipaddresspools -n metallb-system admin-pool &>/dev/null; then
+        return 1
+    fi
+
+    log_info "MetalLB is properly installed"
+    return 0
+}
+
+# Check if Istio is already installed correctly
+check_istio_installed() {
+    log_info "Checking Istio installation status..."
+
+    # Check if istio-system namespace exists
+    if ! kubectl get namespace istio-system &>/dev/null; then
+        return 1
+    fi
+
+    # Check if istiod is ready
+    if ! kubectl get deployment istiod -n istio-system &>/dev/null; then
+        return 1
+    fi
+
+    local ready_replicas
+    ready_replicas=$(kubectl get deployment istiod -n istio-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    if [[ "$ready_replicas" -lt 1 ]]; then
+        return 1
+    fi
+
+    # Check if admin gateway exists
+    if ! kubectl get deployment istio-ingress-admin -n istio-system &>/dev/null; then
+        return 1
+    fi
+
+    # Check if user gateway exists
+    if ! kubectl get deployment istio-ingress-user -n istio-system &>/dev/null; then
+        return 1
+    fi
+
+    log_info "Istio is properly installed with dual gateways"
+    return 0
+}
+
+# Check if a Helm release is installed and ready
+check_helm_release_installed() {
+    local release_name="$1"
+    local namespace="$2"
+
+    if ! helm status "$release_name" -n "$namespace" &>/dev/null; then
+        return 1
+    fi
+
+    local status
+    status=$(helm status "$release_name" -n "$namespace" -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "")
+    if [[ "$status" != "deployed" ]]; then
+        return 1
+    fi
+
+    return 0
+}
 
 # Check if running as root
 check_root() {
@@ -430,6 +816,19 @@ EOF
 
 # Install RKE2
 install_rke2() {
+    start_step "RKE2 Kubernetes"
+
+    # Check if RKE2 is already properly installed
+    if check_rke2_installed; then
+        skip_step "RKE2 Kubernetes" "Already installed and running correctly"
+        # Still setup kubectl access if needed
+        mkdir -p ~/.kube
+        cp /etc/rancher/rke2/rke2.yaml ~/.kube/config 2>/dev/null || true
+        chmod 600 ~/.kube/config 2>/dev/null || true
+        export PATH=$PATH:/var/lib/rancher/rke2/bin
+        return 0
+    fi
+
     log_step "Installing RKE2 ${RKE2_VERSION}..."
 
     # Clean up any existing installation first
@@ -552,11 +951,21 @@ EOF
     # Create symlinks
     ln -sf /var/lib/rancher/rke2/bin/kubectl "${SIAB_BIN_DIR}/kubectl"
 
+    complete_step "RKE2 Kubernetes"
     log_info "RKE2 installed successfully"
 }
 
 # Install Helm
 install_helm() {
+    start_step "Helm Package Manager"
+
+    # Check if Helm is already properly installed
+    if check_helm_installed; then
+        skip_step "Helm Package Manager" "Already installed with required repos"
+        export PATH="${SIAB_BIN_DIR}:${PATH}"
+        return 0
+    fi
+
     log_step "Installing Helm ${HELM_VERSION}..."
 
     # Download and extract Helm
@@ -599,11 +1008,20 @@ install_helm() {
     "${SIAB_BIN_DIR}/helm" repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ || true
     "${SIAB_BIN_DIR}/helm" repo update
 
+    complete_step "Helm Package Manager"
     log_info "Helm installed successfully"
 }
 
 # Install k9s for cluster monitoring
 install_k9s() {
+    start_step "k9s Cluster UI"
+
+    # Check if k9s is already properly installed
+    if check_k9s_installed; then
+        skip_step "k9s Cluster UI" "Already installed and working"
+        return 0
+    fi
+
     log_step "Installing k9s..."
 
     local k9s_version="v0.32.5"
@@ -644,6 +1062,7 @@ EOF
         fi
     fi
 
+    complete_step "k9s Cluster UI"
     log_info "k9s installed at ${SIAB_BIN_DIR}/k9s"
     log_info "PATH configured in /etc/profile.d/siab.sh"
 }
@@ -706,6 +1125,14 @@ create_namespaces() {
 
 # Install cert-manager
 install_cert_manager() {
+    start_step "cert-manager"
+
+    # Check if cert-manager is already properly installed
+    if check_cert_manager_installed; then
+        skip_step "cert-manager" "Already installed and configured"
+        return 0
+    fi
+
     log_step "Installing cert-manager ${CERTMANAGER_VERSION}..."
 
     kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/${CERTMANAGER_VERSION}/cert-manager.crds.yaml
@@ -756,11 +1183,20 @@ spec:
     secretName: siab-ca-secret
 EOF
 
+    complete_step "cert-manager"
     log_info "cert-manager installed"
 }
 
 # Install MetalLB for LoadBalancer services
 install_metallb() {
+    start_step "MetalLB Load Balancer"
+
+    # Check if MetalLB is already properly installed
+    if check_metallb_installed; then
+        skip_step "MetalLB Load Balancer" "Already installed and configured"
+        return 0
+    fi
+
     log_step "Installing MetalLB..."
 
     # Add MetalLB helm repo
@@ -825,11 +1261,20 @@ EOF
     echo "ADMIN_GATEWAY_IP=${ip_base}.240" >> "${SIAB_CONFIG_DIR}/network.env"
     echo "USER_GATEWAY_IP=${ip_base}.242" >> "${SIAB_CONFIG_DIR}/network.env"
 
+    complete_step "MetalLB Load Balancer"
     log_info "MetalLB installed with admin pool (${ip_base}.240-241) and user pool (${ip_base}.242-243)"
 }
 
 # Install Istio with dual-gateway architecture (admin + user planes)
 install_istio() {
+    start_step "Istio Service Mesh"
+
+    # Check if Istio is already properly installed
+    if check_istio_installed; then
+        skip_step "Istio Service Mesh" "Already installed with dual gateways"
+        return 0
+    fi
+
     log_step "Installing Istio ${ISTIO_VERSION} with dual-gateway architecture..."
 
     # Install Istio base
@@ -918,11 +1363,20 @@ spec:
     mode: STRICT
 EOF
 
+    complete_step "Istio Service Mesh"
     log_info "Istio installed with admin and user gateways"
 }
 
 # Install Keycloak
 install_keycloak() {
+    start_step "Keycloak Identity"
+
+    # Check if Keycloak is already installed and ready
+    if kubectl get deployment keycloak -n keycloak -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "1"; then
+        skip_step "Keycloak Identity" "Already installed and running"
+        return 0
+    fi
+
     log_step "Installing Keycloak..."
 
     # Load credentials
@@ -1172,17 +1626,26 @@ spec:
               number: 80
 EOF
 
+    complete_step "Keycloak Identity"
     log_info "Keycloak installed"
 }
 
 # Install MinIO
 install_minio() {
-    log_step "Installing MinIO..."
+    start_step "MinIO Storage"
 
     if [[ "${SIAB_SKIP_STORAGE}" == "true" ]]; then
-        log_warn "Skipping MinIO installation"
+        skip_step "MinIO Storage" "Skipped by configuration"
         return
     fi
+
+    # Check if MinIO is already installed and ready
+    if kubectl get deployment minio -n minio -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "1"; then
+        skip_step "MinIO Storage" "Already installed and running"
+        return 0
+    fi
+
+    log_step "Installing MinIO..."
 
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
@@ -1323,11 +1786,20 @@ spec:
               number: 9001
 EOF
 
+    complete_step "MinIO Storage"
     log_info "MinIO installed"
 }
 
 # Install Trivy Operator
 install_trivy() {
+    start_step "Trivy Security Scanner"
+
+    # Check if Trivy is already installed
+    if check_helm_release_installed "trivy-operator" "trivy-system"; then
+        skip_step "Trivy Security Scanner" "Already installed"
+        return 0
+    fi
+
     log_step "Installing Trivy Operator ${TRIVY_VERSION}..."
 
     helm upgrade --install trivy-operator aqua/trivy-operator \
@@ -1342,11 +1814,20 @@ install_trivy() {
         --set operator.clusterComplianceEnabled=true \
         --wait
 
+    complete_step "Trivy Security Scanner"
     log_info "Trivy Operator installed"
 }
 
 # Install OPA Gatekeeper
 install_gatekeeper() {
+    start_step "OPA Gatekeeper"
+
+    # Check if Gatekeeper is already installed
+    if check_helm_release_installed "gatekeeper" "gatekeeper-system"; then
+        skip_step "OPA Gatekeeper" "Already installed"
+        return 0
+    fi
+
     log_step "Installing OPA Gatekeeper ${GATEKEEPER_VERSION}..."
 
     helm upgrade --install gatekeeper gatekeeper/gatekeeper \
@@ -1362,16 +1843,23 @@ install_gatekeeper() {
     # Wait for Gatekeeper to be ready
     kubectl wait --for=condition=Available deployment --all -n gatekeeper-system --timeout=300s
 
+    complete_step "OPA Gatekeeper"
     log_info "OPA Gatekeeper installed"
 }
 
 # Install Monitoring Stack (Prometheus + Grafana)
 install_monitoring() {
-    log_step "Installing Monitoring Stack (Prometheus + Grafana)..."
+    start_step "Monitoring Stack"
 
     if [[ "${SIAB_SKIP_MONITORING}" == "true" ]]; then
-        log_warn "Skipping monitoring installation"
+        skip_step "Monitoring Stack" "Skipped by configuration"
         return
+    fi
+
+    # Check if monitoring is already installed
+    if kubectl get deployment kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -q "1"; then
+        skip_step "Monitoring Stack" "Already installed and running"
+        return 0
     fi
 
     # Load credentials for Grafana
@@ -1503,11 +1991,20 @@ spec:
               number: 80
 EOF
 
+    complete_step "Monitoring Stack"
     log_info "Monitoring stack installed"
 }
 
 # Install Kubernetes Dashboard
 install_kubernetes_dashboard() {
+    start_step "Kubernetes Dashboard"
+
+    # Check if dashboard is already installed
+    if check_helm_release_installed "kubernetes-dashboard" "kubernetes-dashboard"; then
+        skip_step "Kubernetes Dashboard" "Already installed"
+        return 0
+    fi
+
     log_step "Installing Kubernetes Dashboard..."
 
     # Clean up any existing dashboard
@@ -1601,11 +2098,14 @@ spec:
               number: 443
 EOF
 
+    complete_step "Kubernetes Dashboard"
     log_info "Kubernetes Dashboard installed"
 }
 
 # Install SIAB tools (status script, etc.)
 install_siab_tools() {
+    start_step "SIAB Tools"
+
     log_step "Installing SIAB management tools..."
 
     # Install siab-status script
@@ -1647,11 +2147,14 @@ install_siab_tools() {
         log_info "siab-fix-istio command installed"
     fi
 
+    complete_step "SIAB Tools"
     log_info "SIAB tools installed"
 }
 
 # Apply security policies
 apply_security_policies() {
+    start_step "Security Policies"
+
     log_step "Applying security policies..."
 
     # Default deny network policy for default namespace
@@ -1692,11 +2195,14 @@ EOF
         }
     fi
 
+    complete_step "Security Policies"
     log_info "Security policies applied"
 }
 
 # Install SIAB CRDs
 install_siab_crds() {
+    start_step "SIAB CRDs"
+
     log_step "Installing SIAB Custom Resource Definitions..."
 
     # Install CRDs from repo
@@ -1718,11 +2224,14 @@ install_siab_crds() {
         log_info "Example manifests copied to ${SIAB_DIR}/examples/"
     fi
 
+    complete_step "SIAB CRDs"
     log_info "SIAB CRDs installed"
 }
 
 # Install landing page dashboard
 install_dashboard() {
+    start_step "SIAB Dashboard"
+
     log_step "Installing SIAB Dashboard..."
 
     # Deploy dashboard from repo if available
@@ -1742,11 +2251,21 @@ install_dashboard() {
         log_info "Manifests copied to ${SIAB_DIR}/manifests/"
     fi
 
+    complete_step "SIAB Dashboard"
     log_info "Dashboard setup complete"
 }
 
 # Create Istio Gateways (Admin and User planes)
 create_istio_gateway() {
+    start_step "Istio Gateways"
+
+    # Check if gateways already exist
+    if kubectl get gateway admin-gateway -n istio-system &>/dev/null && \
+       kubectl get gateway user-gateway -n istio-system &>/dev/null; then
+        skip_step "Istio Gateways" "Already configured"
+        return 0
+    fi
+
     log_step "Creating Istio Gateways (Admin and User planes)..."
 
     # Create certificate for gateways
@@ -1947,11 +2466,14 @@ spec:
               - "dashboard.${SIAB_DOMAIN}:*"
 EOF
 
+    complete_step "Istio Gateways"
     log_info "Istio Gateway and authentication created"
 }
 
 # Final configuration
 final_configuration() {
+    start_step "Final Configuration"
+
     log_step "Performing final configuration..."
 
     # Get gateway IPs from MetalLB LoadBalancer services
@@ -2032,6 +2554,7 @@ EOF
     # Setup kubectl access for non-root users
     setup_nonroot_access
 
+    complete_step "Final Configuration"
     log_info "Final configuration complete"
 }
 
@@ -2177,39 +2700,90 @@ print_completion() {
 
 # Main installation
 main() {
+    echo ""
+    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║         SIAB - Secure Infrastructure as a Box                  ║${NC}"
+    echo -e "${BOLD}║                  Version ${SIAB_VERSION}                                   ║${NC}"
+    echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
     log_info "Starting SIAB ${SIAB_VERSION} installation..."
+
+    # Initialize status tracking
+    init_step_status
 
     check_root
     setup_directories
-    check_requirements
 
     # Redirect all output to log file while still showing on console
     exec > >(tee -a "${SIAB_LOG_DIR}/install.log") 2>&1
 
+    # System Requirements check
+    start_step "System Requirements"
+    check_requirements
+    complete_step "System Requirements"
+
+    # System Dependencies
+    start_step "System Dependencies"
     install_dependencies
-    clone_siab_repo          # Clone repo after git is installed
+    complete_step "System Dependencies"
+
+    # Repository Clone
+    start_step "Repository Clone"
+    clone_siab_repo
+    complete_step "Repository Clone"
+
+    # Firewall Configuration
+    start_step "Firewall Configuration"
     configure_firewall
+    complete_step "Firewall Configuration"
+
+    # Security Configuration
+    start_step "Security Configuration"
     configure_security
+    complete_step "Security Configuration"
+
+    # Core Infrastructure
     install_rke2
     install_helm
     install_k9s
+
+    # Credentials Generation
+    start_step "Credentials Generation"
     generate_credentials
+    complete_step "Credentials Generation"
+
+    # Kubernetes Namespaces
+    start_step "Kubernetes Namespaces"
     create_namespaces
+    complete_step "Kubernetes Namespaces"
+
+    # Kubernetes Components
     install_cert_manager
     install_metallb
     install_istio
     create_istio_gateway
+
+    # Applications
     install_keycloak
     install_minio
     install_trivy
     install_gatekeeper
     install_monitoring
     install_kubernetes_dashboard
+
+    # SIAB Components
     install_siab_tools
     apply_security_policies
     install_siab_crds
-    install_dashboard        # Install SIAB dashboard
+    install_dashboard
+
+    # Final Configuration
     final_configuration
+
+    # Print final status dashboard
+    print_status_dashboard
+
     print_completion
 
     log_info "Installation completed successfully!"
