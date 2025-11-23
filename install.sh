@@ -2147,6 +2147,13 @@ install_siab_tools() {
         log_info "siab-fix-istio command installed"
     fi
 
+    # Install diagnostic script
+    if [[ -f "${SIAB_REPO_DIR}/siab-diagnose.sh" ]]; then
+        cp "${SIAB_REPO_DIR}/siab-diagnose.sh" "${SIAB_BIN_DIR}/siab-diagnose"
+        chmod +x "${SIAB_BIN_DIR}/siab-diagnose"
+        log_info "siab-diagnose command installed"
+    fi
+
     complete_step "SIAB Tools"
     log_info "SIAB tools installed"
 }
@@ -2656,6 +2663,7 @@ print_completion() {
     echo "  siab-info                - Show access URLs & credentials"
     echo "  siab-fix-rke2            - Troubleshoot RKE2 issues"
     echo "  siab-fix-istio           - Fix Istio routing issues"
+    echo "  siab-diagnose            - Diagnose and fix common issues"
     echo "  siab-uninstall           - Remove SIAB completely"
     echo ""
     echo -e "${BLUE}▸ Kubernetes Commands${NC}"
