@@ -426,7 +426,7 @@ check_calico() {
 fix_network_connectivity() {
     section "Attempting Network Fixes"
 
-    log_info "Step 1: Ensuring NetworkPolicies allow traffic..."
+    log_info "Step 1: Ensuring Kubernetes NetworkPolicies allow traffic..."
 
     for ns in keycloak minio monitoring kubernetes-dashboard istio-system; do
         cat <<EOF | $KUBECTL apply -f - 2>/dev/null || true
@@ -445,21 +445,45 @@ EOF
     done
     log_fixed "Applied allow-all-ingress policies to all backend namespaces"
 
-    log_info "Step 2: Restarting Calico/Canal to refresh iptables rules..."
+    log_info "Step 2: Creating Calico GlobalNetworkPolicy to allow all pod traffic..."
+    cat <<EOF | $KUBECTL apply -f - 2>/dev/null || true
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-all-pods
+spec:
+  order: 1
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+  egress:
+    - action: Allow
+EOF
+    log_fixed "Applied Calico GlobalNetworkPolicy to allow all pod traffic"
+
+    log_info "Step 3: Restarting Calico/Canal to refresh iptables rules..."
     $KUBECTL delete pod -n kube-system -l k8s-app=canal --wait=false 2>/dev/null || true
     log_info "Waiting for Canal to restart..."
     sleep 10
     $KUBECTL wait --for=condition=Ready pod -n kube-system -l k8s-app=canal --timeout=120s 2>/dev/null || true
     log_fixed "Restarted Canal pods"
 
-    log_info "Step 3: Restarting backend pods to get fresh network config..."
+    log_info "Step 4: Restarting backend pods to get fresh network config..."
     for ns in keycloak minio; do
         $KUBECTL delete pods -n "$ns" --all --wait=false 2>/dev/null || true
     done
     log_info "Waiting for backend pods to restart..."
     sleep 15
 
-    log_info "Step 4: Verifying fix..."
+    log_info "Step 5: Restarting Istio gateways..."
+    $KUBECTL delete pod -n istio-system -l istio=ingress-admin --wait=false 2>/dev/null || true
+    $KUBECTL delete pod -n istio-system -l istio=ingress-user --wait=false 2>/dev/null || true
+    sleep 10
+
+    log_info "Step 6: Verifying fix..."
     sleep 10
 
     local gateway_pod
@@ -471,11 +495,11 @@ EOF
     if [[ -n "$gateway_pod" ]] && [[ -n "$keycloak_pod_ip" ]]; then
         if $KUBECTL exec -n istio-system "$gateway_pod" -- curl -s --connect-timeout 5 "http://$keycloak_pod_ip:8080/health/ready" &>/dev/null; then
             log_fixed "Network connectivity restored!"
+            return 0
         else
-            log_fail "Network connectivity still broken after fixes"
-            log_info "Manual intervention may be required. Check:"
-            log_info "  - iptables -L cali-FORWARD -n -v"
-            log_info "  - journalctl -u rke2-server | grep -i error"
+            log_fail "Network connectivity still broken after standard fixes"
+            log_info "Trying aggressive fix: Modifying Calico Felix configuration..."
+            fix_calico_aggressive
         fi
     fi
 }
@@ -552,6 +576,106 @@ EOF
     log_fixed "Istio routing reconfigured"
 }
 
+fix_calico_aggressive() {
+    section "Aggressive Calico Fix (Modifying Felix Configuration)"
+
+    log_warn "This will modify Calico's Felix configuration to be more permissive"
+    log_warn "This may reduce network security but will fix connectivity issues"
+
+    log_info "Step 1: Configuring Felix to allow all traffic by default..."
+    cat <<EOF | $KUBECTL apply -f -
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  defaultEndpointToHostAction: Accept
+  iptablesFilterAllowAction: Accept
+  iptablesMangleAllowAction: Accept
+  logSeverityScreen: Info
+  reportingInterval: 0s
+EOF
+    log_fixed "Applied permissive Felix configuration"
+
+    log_info "Step 2: Restarting Canal to apply new configuration..."
+    $KUBECTL delete pod -n kube-system -l k8s-app=canal --wait=false 2>/dev/null || true
+    log_info "Waiting for Canal to restart..."
+    sleep 20
+    $KUBECTL wait --for=condition=Ready pod -n kube-system -l k8s-app=canal --timeout=120s 2>/dev/null || true
+    log_fixed "Restarted Canal pods"
+
+    log_info "Step 3: Restarting all Istio and backend pods..."
+    $KUBECTL delete pod -n istio-system -l istio=ingress-admin --wait=false 2>/dev/null || true
+    $KUBECTL delete pod -n istio-system -l istio=ingress-user --wait=false 2>/dev/null || true
+    $KUBECTL delete pod -n keycloak -l app=keycloak --wait=false 2>/dev/null || true
+    sleep 20
+
+    log_info "Step 4: Verifying connectivity..."
+    local gateway_pod
+    gateway_pod=$($KUBECTL get pods -n istio-system -l istio=ingress-admin -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+    local keycloak_pod_ip
+    keycloak_pod_ip=$($KUBECTL get pods -n keycloak -l app=keycloak -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || echo "")
+
+    if [[ -n "$gateway_pod" ]] && [[ -n "$keycloak_pod_ip" ]]; then
+        sleep 10
+        if $KUBECTL exec -n istio-system "$gateway_pod" -- curl -s --connect-timeout 5 "http://$keycloak_pod_ip:8080/health/ready" &>/dev/null; then
+            log_fixed "Network connectivity restored with aggressive fix!"
+        else
+            log_fail "Network connectivity STILL broken even after aggressive fixes"
+            log_error "This may be a fundamental CNI issue. Consider:"
+            log_info "  1. Reinstalling RKE2 with a different CNI (cilium, flannel)"
+            log_info "  2. Checking for kernel/OS compatibility issues"
+            log_info "  3. Verifying network interfaces: ip link show"
+            log_info "  4. Checking dmesg for network errors: dmesg | grep -i net"
+        fi
+    fi
+}
+
+fix_istio_authorization() {
+    section "Fixing Istio Authorization Policies"
+
+    log_info "Creating permissive authorization policy for admin services..."
+    cat <<EOF | $KUBECTL apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-admin-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - "*"
+EOF
+    log_fixed "Applied permissive authorization policy for admin gateway"
+
+    log_info "Creating permissive authorization policy for user services..."
+    cat <<EOF | $KUBECTL apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-user-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            hosts:
+              - "*"
+EOF
+    log_fixed "Applied permissive authorization policy for user gateway"
+}
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -576,8 +700,46 @@ main() {
     check_calico
     check_network_connectivity
 
-    if [[ "$AUTO_FIX" == "true" ]] && [[ "$ISSUES_FOUND" -gt 0 ]]; then
+    if [[ "$AUTO_FIX" == "true" ]]; then
+        # Always fix Istio authorization (RBAC denied errors)
+        fix_istio_authorization
+
+        # Always fix Istio routing (mTLS issues)
         fix_istio_routing
+
+        # Fix network connectivity if there were issues
+        if [[ "$ISSUES_FOUND" -gt 0 ]]; then
+            fix_network_connectivity
+        fi
+    fi
+
+    # Final connectivity test
+    section "Final Connectivity Test"
+    local final_test_passed=true
+
+    local gateway_pod
+    gateway_pod=$($KUBECTL get pods -n istio-system -l istio=ingress-admin -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+
+    if [[ -n "$gateway_pod" ]]; then
+        # Test Keycloak
+        local keycloak_ip
+        keycloak_ip=$($KUBECTL get pod -n keycloak -l app=keycloak -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || echo "")
+        if [[ -n "$keycloak_ip" ]]; then
+            if $KUBECTL exec -n istio-system "$gateway_pod" -- curl -s --connect-timeout 5 "http://$keycloak_ip:8080/health/ready" &>/dev/null; then
+                log_ok "Keycloak reachable via pod IP"
+            else
+                log_fail "Keycloak NOT reachable via pod IP"
+                final_test_passed=false
+            fi
+        fi
+
+        # Test via service
+        if $KUBECTL exec -n istio-system "$gateway_pod" -- curl -s --connect-timeout 5 "http://keycloak.keycloak.svc.cluster.local:80/health/ready" &>/dev/null; then
+            log_ok "Keycloak reachable via service"
+        else
+            log_fail "Keycloak NOT reachable via service"
+            final_test_passed=false
+        fi
     fi
 
     # Summary
