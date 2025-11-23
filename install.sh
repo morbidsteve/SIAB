@@ -639,12 +639,12 @@ create_namespaces() {
     kubectl create namespace gatekeeper-system --dry-run=client -o yaml | kubectl apply -f -
 
     # Label namespaces for Istio injection
-    # Note: keycloak and minio have Istio disabled to avoid sidecar issues with their jobs
+    # Note: keycloak, minio, and monitoring have Istio disabled to avoid sidecar issues with their jobs
     kubectl label namespace default istio-injection=enabled --overwrite
     kubectl label namespace siab-system istio-injection=enabled --overwrite
     kubectl label namespace keycloak istio-injection=disabled --overwrite
     kubectl label namespace minio istio-injection=disabled --overwrite
-    kubectl label namespace monitoring istio-injection=enabled --overwrite
+    kubectl label namespace monitoring istio-injection=disabled --overwrite
 
     log_info "Namespaces created"
 }
@@ -1167,8 +1167,25 @@ install_monitoring() {
     # Load credentials for Grafana
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
-    # Clean up any existing monitoring installation
+    # Disable Istio sidecar injection for monitoring namespace FIRST
+    kubectl label namespace monitoring istio-injection=disabled --overwrite 2>/dev/null || true
+
+    # Clean up any existing monitoring installation thoroughly
+    log_info "Cleaning up any existing monitoring installation..."
     helm uninstall kube-prometheus-stack -n monitoring 2>/dev/null || true
+
+    # Force delete any stuck jobs (admission jobs can get stuck with Istio sidecars)
+    for job in $(kubectl get jobs -n monitoring -o name 2>/dev/null); do
+        log_info "Removing stuck job: $job"
+        kubectl delete "$job" -n monitoring --force --grace-period=0 2>/dev/null || true
+    done
+
+    # Kill any pods that might be hanging
+    for pod in $(kubectl get pods -n monitoring -o name 2>/dev/null); do
+        log_info "Force removing pod: $pod"
+        kubectl delete "$pod" -n monitoring --force --grace-period=0 2>/dev/null || true
+    done
+
     kubectl delete pvc --all -n monitoring 2>/dev/null || true
     sleep 3
 
