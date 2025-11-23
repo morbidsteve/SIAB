@@ -61,6 +61,8 @@ readonly MINIO_VERSION="${MINIO_VERSION:-5.0.15}"
 readonly TRIVY_VERSION="${TRIVY_VERSION:-0.18.4}"
 readonly GATEKEEPER_VERSION="${GATEKEEPER_VERSION:-3.14.0}"
 readonly CERTMANAGER_VERSION="${CERTMANAGER_VERSION:-v1.13.3}"
+readonly PROMETHEUS_STACK_VERSION="${PROMETHEUS_STACK_VERSION:-56.6.2}"
+readonly KUBE_DASHBOARD_VERSION="${KUBE_DASHBOARD_VERSION:-7.1.0}"
 
 # Configuration
 SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
@@ -562,6 +564,8 @@ install_helm() {
     "${SIAB_BIN_DIR}/helm" repo add aqua https://aquasecurity.github.io/helm-charts/ || true
     "${SIAB_BIN_DIR}/helm" repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts || true
     "${SIAB_BIN_DIR}/helm" repo add minio https://charts.min.io/ || true
+    "${SIAB_BIN_DIR}/helm" repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+    "${SIAB_BIN_DIR}/helm" repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ || true
     "${SIAB_BIN_DIR}/helm" repo update
 
     log_info "Helm installed successfully"
@@ -1151,6 +1155,181 @@ install_gatekeeper() {
     log_info "OPA Gatekeeper installed"
 }
 
+# Install Monitoring Stack (Prometheus + Grafana)
+install_monitoring() {
+    log_step "Installing Monitoring Stack (Prometheus + Grafana)..."
+
+    if [[ "${SIAB_SKIP_MONITORING}" == "true" ]]; then
+        log_warn "Skipping monitoring installation"
+        return
+    fi
+
+    # Load credentials for Grafana
+    source "${SIAB_CONFIG_DIR}/credentials.env"
+
+    # Clean up any existing monitoring installation
+    helm uninstall kube-prometheus-stack -n monitoring 2>/dev/null || true
+    kubectl delete pvc --all -n monitoring 2>/dev/null || true
+    sleep 3
+
+    # Install kube-prometheus-stack (Prometheus, Grafana, AlertManager)
+    helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --version ${PROMETHEUS_STACK_VERSION} \
+        --set prometheus.prometheusSpec.retention=7d \
+        --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.accessModes[0]=ReadWriteOnce \
+        --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=10Gi \
+        --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+        --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+        --set grafana.enabled=true \
+        --set grafana.adminUser=admin \
+        --set grafana.adminPassword="${GRAFANA_ADMIN_PASSWORD}" \
+        --set grafana.service.type=ClusterIP \
+        --set grafana.persistence.enabled=false \
+        --set grafana.sidecar.dashboards.enabled=true \
+        --set grafana.sidecar.dashboards.searchNamespace=ALL \
+        --set alertmanager.enabled=true \
+        --set alertmanager.alertmanagerSpec.retention=120h \
+        --set nodeExporter.enabled=true \
+        --set kubeStateMetrics.enabled=true \
+        --timeout=600s
+
+    # Wait for Grafana to be ready
+    log_info "Waiting for Grafana to be ready..."
+    local max_wait=300
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl get deployment kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -q "1"; then
+            log_info "Grafana is ready!"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [[ $((elapsed % 30)) -eq 0 ]]; then
+            echo "  Waiting for Grafana... (${elapsed}s)"
+        fi
+    done
+
+    # Create Istio VirtualService for Grafana
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  hosts:
+    - "grafana.${SIAB_DOMAIN}"
+  gateways:
+    - istio-system/siab-gateway
+  http:
+    - route:
+        - destination:
+            host: kube-prometheus-stack-grafana
+            port:
+              number: 80
+EOF
+
+    log_info "Monitoring stack installed"
+}
+
+# Install Kubernetes Dashboard
+install_kubernetes_dashboard() {
+    log_step "Installing Kubernetes Dashboard..."
+
+    # Clean up any existing dashboard
+    helm uninstall kubernetes-dashboard -n kubernetes-dashboard 2>/dev/null || true
+    kubectl delete namespace kubernetes-dashboard 2>/dev/null || true
+    sleep 3
+
+    # Create namespace
+    kubectl create namespace kubernetes-dashboard --dry-run=client -o yaml | kubectl apply -f -
+    kubectl label namespace kubernetes-dashboard istio-injection=disabled --overwrite
+
+    # Install Kubernetes Dashboard
+    helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
+        --namespace kubernetes-dashboard \
+        --version ${KUBE_DASHBOARD_VERSION} \
+        --set app.ingress.enabled=false \
+        --set api.containers.resources.requests.cpu=100m \
+        --set api.containers.resources.requests.memory=200Mi \
+        --set web.containers.resources.requests.cpu=100m \
+        --set web.containers.resources.requests.memory=200Mi \
+        --timeout=300s
+
+    # Wait for dashboard to be ready
+    log_info "Waiting for Kubernetes Dashboard to be ready..."
+    kubectl wait --for=condition=Available deployment --all -n kubernetes-dashboard --timeout=300s 2>/dev/null || true
+
+    # Create admin service account for dashboard access
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: siab-admin
+  namespace: kubernetes-dashboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: siab-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: siab-admin
+  namespace: kubernetes-dashboard
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: siab-admin-token
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/service-account.name: siab-admin
+type: kubernetes.io/service-account-token
+EOF
+
+    # Create Istio VirtualService for Dashboard
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  hosts:
+    - "dashboard.${SIAB_DOMAIN}"
+  gateways:
+    - istio-system/siab-gateway
+  http:
+    - route:
+        - destination:
+            host: kubernetes-dashboard-kong-proxy
+            port:
+              number: 443
+EOF
+
+    log_info "Kubernetes Dashboard installed"
+}
+
+# Install SIAB tools (status script, etc.)
+install_siab_tools() {
+    log_step "Installing SIAB management tools..."
+
+    # Install siab-status script
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -f "${script_dir}/siab-status.sh" ]]; then
+        cp "${script_dir}/siab-status.sh" "${SIAB_BIN_DIR}/siab-status"
+        chmod +x "${SIAB_BIN_DIR}/siab-status"
+        log_info "siab-status command installed"
+    fi
+
+    log_info "SIAB tools installed"
+}
+
 # Apply security policies
 apply_security_policies() {
     log_step "Applying security policies..."
@@ -1365,34 +1544,57 @@ print_completion() {
     local ingress_port
     ingress_port=$(kubectl get svc -n istio-system istio-ingress -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}')
 
+    # Get dashboard token
+    local dashboard_token
+    dashboard_token=$(kubectl get secret siab-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' 2>/dev/null | base64 -d)
+
     echo ""
-    echo "============================================"
-    echo -e "${GREEN}SIAB Installation Complete!${NC}"
-    echo "============================================"
+    echo "╔════════════════════════════════════════════════════════════════╗"
+    echo -e "║          ${GREEN}SIAB Installation Complete!${NC}                          ║"
+    echo "╚════════════════════════════════════════════════════════════════╝"
     echo ""
-    echo "Access your platform:"
-    echo "  Dashboard:  https://dashboard.${SIAB_DOMAIN}:${ingress_port}"
-    echo "  Keycloak:   https://keycloak.${SIAB_DOMAIN}:${ingress_port}"
-    echo "  MinIO:      https://minio.${SIAB_DOMAIN}:${ingress_port}"
+    echo -e "${BLUE}▸ Web Interfaces${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}:${ingress_port}"
+    echo "  K8s Dashboard:           https://dashboard.${SIAB_DOMAIN}:${ingress_port}"
+    echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}:${ingress_port}"
+    echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}:${ingress_port}"
     echo ""
-    echo "Credentials saved to: ${SIAB_CONFIG_DIR}/credentials.env"
+    echo -e "${BLUE}▸ Quick Commands${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  siab-status              - View SIAB platform status"
+    echo "  k9s                      - Interactive cluster UI (terminal)"
+    echo "  kubectl get pods -A      - List all pods"
     echo ""
-    echo "To deploy applications, use the SIABApplication CRD:"
-    echo "  kubectl apply -f my-siab-app.yaml"
+    echo -e "${BLUE}▸ Credentials${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  File: ${SIAB_CONFIG_DIR}/credentials.env"
+    echo "  View: sudo cat ${SIAB_CONFIG_DIR}/credentials.env"
     echo ""
-    echo "Cluster monitoring with k9s:"
-    echo "  k9s"
-    echo ""
-    if [[ -n "${SUDO_USER:-}" ]] && [[ "${SUDO_USER}" != "root" ]]; then
-        echo "Non-root access configured for user: ${SUDO_USER}"
-        echo "  Run: source ~/.bashrc  (or log out and back in)"
-        echo "  Then use kubectl, helm, k9s without sudo"
+    if [[ -n "$dashboard_token" ]]; then
+        echo -e "${BLUE}▸ Kubernetes Dashboard Token${NC}"
+        echo "  ─────────────────────────────────────────"
+        echo "  Use this token to log into the K8s Dashboard:"
+        echo ""
+        echo "  $dashboard_token"
         echo ""
     fi
-    echo "Documentation: ${SIAB_DIR}/docs/"
+    if [[ -n "${SUDO_USER:-}" ]] && [[ "${SUDO_USER}" != "root" ]]; then
+        echo -e "${BLUE}▸ Non-root Access${NC}"
+        echo "  ─────────────────────────────────────────"
+        echo "  User: ${SUDO_USER}"
+        echo "  Run: source ~/.bashrc  (or log out and back in)"
+        echo "  Then use kubectl, helm, k9s, siab-status without sudo"
+        echo ""
+    fi
+    echo -e "${YELLOW}Note: Add these hosts to /etc/hosts on client machines:${NC}"
+    local node_ip
+    node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    echo "  ${node_ip} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN}"
     echo ""
-    echo "Thank you for installing SIAB!"
-    echo "============================================"
+    echo "════════════════════════════════════════════════════════════════"
+    echo "  Thank you for installing SIAB - Secure Infrastructure as a Box"
+    echo "════════════════════════════════════════════════════════════════"
 }
 
 # Main installation
@@ -1421,9 +1623,11 @@ main() {
     install_minio
     install_trivy
     install_gatekeeper
+    install_monitoring
+    install_kubernetes_dashboard
+    install_siab_tools
     apply_security_policies
     install_siab_crds
-    install_dashboard
     final_configuration
     print_completion
 
