@@ -1009,6 +1009,7 @@ install_minio() {
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Install MinIO (persistence disabled for single-node setup without storage provisioner)
+    # Don't use --wait as post-install jobs can hang with Istio sidecars
     helm upgrade --install minio minio/minio \
         --namespace minio \
         --set rootUser="${MINIO_ROOT_USER}" \
@@ -1021,7 +1022,32 @@ install_minio() {
         --set securityContext.runAsGroup=1000 \
         --set securityContext.fsGroup=1000 \
         --set consoleService.type=ClusterIP \
-        --wait --timeout=600s
+        --set postJob.podAnnotations."sidecar\.istio\.io/inject"=false \
+        --timeout=600s
+
+    # Wait for MinIO deployment to be ready
+    log_info "Waiting for MinIO to be ready..."
+    local max_wait=300
+    local elapsed=0
+
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl get deployment minio -n minio -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "1"; then
+            log_info "MinIO is ready!"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [[ $((elapsed % 30)) -eq 0 ]]; then
+            echo "  Waiting for MinIO... (${elapsed}s)"
+            kubectl get pods -n minio 2>/dev/null || true
+        fi
+    done
+
+    if [[ $elapsed -ge $max_wait ]]; then
+        log_error "MinIO installation timeout"
+        kubectl describe pods -n minio
+        exit 1
+    fi
 
     # Create Istio VirtualService for MinIO Console
     cat <<EOF | kubectl apply -f -
