@@ -968,6 +968,20 @@ EOF
         exit 1
     fi
 
+    # Create DestinationRule to disable mTLS for Keycloak (no sidecar)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: keycloak-disable-mtls
+  namespace: keycloak
+spec:
+  host: keycloak.keycloak.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
     # Create Istio VirtualService for Keycloak
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
@@ -983,7 +997,7 @@ spec:
   http:
     - route:
         - destination:
-            host: keycloak
+            host: keycloak.keycloak.svc.cluster.local
             port:
               number: 80
 EOF
@@ -1093,6 +1107,20 @@ install_minio() {
         exit 1
     fi
 
+    # Create DestinationRule to disable mTLS for MinIO (no sidecar)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: minio-disable-mtls
+  namespace: minio
+spec:
+  host: minio-console.minio.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
     # Create Istio VirtualService for MinIO Console
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
@@ -1108,7 +1136,7 @@ spec:
   http:
     - route:
         - destination:
-            host: minio-console
+            host: minio-console.minio.svc.cluster.local
             port:
               number: 9001
 EOF
@@ -1247,6 +1275,20 @@ install_monitoring() {
         fi
     done
 
+    # Create DestinationRule to disable mTLS for monitoring services (they don't have sidecars)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: grafana-disable-mtls
+  namespace: monitoring
+spec:
+  host: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
     # Create Istio VirtualService for Grafana
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
@@ -1257,12 +1299,13 @@ metadata:
 spec:
   hosts:
     - "grafana.${SIAB_DOMAIN}"
+    - "grafana"
   gateways:
     - istio-system/siab-gateway
   http:
     - route:
         - destination:
-            host: kube-prometheus-stack-grafana
+            host: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
             port:
               number: 80
 EOF
@@ -1329,6 +1372,20 @@ metadata:
 type: kubernetes.io/service-account-token
 EOF
 
+    # Create DestinationRule to disable mTLS for Dashboard (no sidecar)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: dashboard-disable-mtls
+  namespace: kubernetes-dashboard
+spec:
+  host: kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
     # Create Istio VirtualService for Dashboard
     cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
@@ -1344,7 +1401,7 @@ spec:
   http:
     - route:
         - destination:
-            host: kubernetes-dashboard-kong-proxy
+            host: kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local
             port:
               number: 443
 EOF
