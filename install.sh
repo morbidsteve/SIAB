@@ -635,10 +635,11 @@ create_namespaces() {
     kubectl create namespace gatekeeper-system --dry-run=client -o yaml | kubectl apply -f -
 
     # Label namespaces for Istio injection
+    # Note: keycloak and minio have Istio disabled to avoid sidecar issues with their jobs
     kubectl label namespace default istio-injection=enabled --overwrite
     kubectl label namespace siab-system istio-injection=enabled --overwrite
-    kubectl label namespace keycloak istio-injection=enabled --overwrite
-    kubectl label namespace minio istio-injection=enabled --overwrite
+    kubectl label namespace keycloak istio-injection=disabled --overwrite
+    kubectl label namespace minio istio-injection=disabled --overwrite
     kubectl label namespace monitoring istio-injection=enabled --overwrite
 
     log_info "Namespaces created"
@@ -762,9 +763,6 @@ install_keycloak() {
     kubectl delete pvc --all -n keycloak 2>/dev/null || true
     kubectl delete pods --all -n keycloak --force --grace-period=0 2>/dev/null || true
     sleep 3
-
-    # Disable Istio sidecar injection for keycloak namespace
-    kubectl label namespace keycloak istio-injection=disabled --overwrite 2>/dev/null || true
 
     # Create secrets
     local pg_password=$(openssl rand -base64 24 | tr -d '=+/' | head -c 24)
@@ -1001,16 +999,47 @@ install_minio() {
     # Load credentials
     source "${SIAB_CONFIG_DIR}/credentials.env"
 
-    # Clean up any existing/stuck MinIO installation
-    log_info "Cleaning up any existing MinIO installation..."
-    helm uninstall minio -n minio 2>/dev/null || true
-    kubectl delete jobs --all -n minio 2>/dev/null || true
-    kubectl delete pods --all -n minio --force --grace-period=0 2>/dev/null || true
-    kubectl delete pvc --all -n minio 2>/dev/null || true
-    sleep 3
-
-    # Disable Istio sidecar injection for minio namespace (simplifies setup)
+    # Disable Istio sidecar injection for minio namespace FIRST (before any cleanup)
+    # This ensures any new pods created won't get sidecars injected
     kubectl label namespace minio istio-injection=disabled --overwrite 2>/dev/null || true
+
+    # Clean up any existing/stuck MinIO installation thoroughly
+    log_info "Cleaning up any existing MinIO installation..."
+
+    # First, uninstall the helm release
+    helm uninstall minio -n minio --wait 2>/dev/null || true
+
+    # Force delete any stuck jobs (post-job can get stuck with Istio sidecars)
+    for job in $(kubectl get jobs -n minio -o name 2>/dev/null); do
+        log_info "Removing stuck job: $job"
+        kubectl delete "$job" -n minio --force --grace-period=0 2>/dev/null || true
+    done
+
+    # Kill any pods that might be hanging (especially with Istio sidecars that won't exit)
+    for pod in $(kubectl get pods -n minio -o name 2>/dev/null); do
+        log_info "Force removing pod: $pod"
+        kubectl delete "$pod" -n minio --force --grace-period=0 2>/dev/null || true
+    done
+
+    # Delete any PVCs
+    kubectl delete pvc --all -n minio 2>/dev/null || true
+
+    # Wait for everything to be gone
+    log_info "Waiting for cleanup to complete..."
+    local cleanup_timeout=60
+    local cleanup_elapsed=0
+    while [[ $cleanup_elapsed -lt $cleanup_timeout ]]; do
+        local remaining_pods=$(kubectl get pods -n minio --no-headers 2>/dev/null | wc -l)
+        if [[ "$remaining_pods" -eq 0 ]]; then
+            break
+        fi
+        sleep 2
+        cleanup_elapsed=$((cleanup_elapsed + 2))
+    done
+
+    # Final force cleanup if anything remains
+    kubectl delete pods --all -n minio --force --grace-period=0 2>/dev/null || true
+    sleep 2
 
     # Create MinIO secret
     kubectl create secret generic minio-creds \
