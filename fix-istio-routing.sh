@@ -2,8 +2,8 @@
 # SIAB Istio Routing Fix Script
 # Fixes the upstream connect errors by:
 # 1. Moving DestinationRules to istio-system namespace
-# 2. Configuring ingress gateway with hostPort for standard 80/443 ports
-# 3. Updating VirtualServices with FQDN hosts
+# 2. Configuring dual ingress gateways (admin and user) with MetalLB
+# 3. Updating VirtualServices with FQDN hosts and correct gateways
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ fi
 
 SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
 
-log_step "Fixing Istio routing configuration..."
+log_step "Fixing Istio routing configuration for dual-gateway architecture..."
 
 # Step 1: Delete old DestinationRules from wrong namespaces
 log_info "Removing old DestinationRules from service namespaces..."
@@ -122,10 +122,11 @@ spec:
       mode: DISABLE
 EOF
 
-# Step 4: Create VirtualServices in istio-system namespace
+# Step 4: Create VirtualServices in istio-system namespace with correct gateways
 log_info "Creating VirtualServices in istio-system namespace..."
 cat <<EOF | kubectl apply -f -
 ---
+# Admin Plane VirtualServices (use admin-gateway)
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -135,7 +136,7 @@ spec:
   hosts:
     - "keycloak.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -152,7 +153,7 @@ spec:
   hosts:
     - "minio.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -169,7 +170,7 @@ spec:
   hosts:
     - "grafana.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -186,7 +187,7 @@ spec:
   hosts:
     - "k8s-dashboard.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -194,6 +195,7 @@ spec:
             port:
               number: 443
 ---
+# User Plane VirtualServices (use user-gateway)
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -204,7 +206,7 @@ spec:
     - "dashboard.${SIAB_DOMAIN}"
     - "${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - user-gateway
   http:
     - match:
         - uri:
@@ -216,39 +218,112 @@ spec:
               number: 80
 EOF
 
-# Step 5: Patch ingress gateway to use hostPort for standard ports
-log_info "Patching Istio ingress gateway for standard ports (80/443)..."
+# Step 5: Create dual Istio gateways (admin and user)
+log_info "Creating admin and user gateways..."
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: admin-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-admin
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+      tls:
+        httpsRedirect: true
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+      tls:
+        mode: SIMPLE
+        credentialName: siab-gateway-cert
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: user-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-user
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+        - "${SIAB_DOMAIN}"
+      tls:
+        httpsRedirect: true
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+        - "${SIAB_DOMAIN}"
+      tls:
+        mode: SIMPLE
+        credentialName: siab-gateway-cert
+EOF
 
-# Scale to 1 replica (hostPort can only bind once per node)
-kubectl scale deployment istio-ingress -n istio-system --replicas=1
+# Step 6: Get LoadBalancer IPs and update /etc/hosts
+log_info "Getting gateway LoadBalancer IPs..."
 
-# Update the service to ClusterIP (we'll use hostPort instead of NodePort)
-kubectl patch svc istio-ingress -n istio-system --type='json' -p='[
-  {"op": "replace", "path": "/spec/type", "value": "ClusterIP"}
-]' 2>/dev/null || true
+# Wait for IPs
+timeout=60
+elapsed=0
+while [[ $elapsed -lt $timeout ]]; do
+    ADMIN_GATEWAY_IP=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    USER_GATEWAY_IP=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 
-# Patch the deployment to use hostPort
-kubectl patch deployment istio-ingress -n istio-system --type='json' -p='[
-  {"op": "replace", "path": "/spec/template/spec/containers/0/ports", "value": [
-    {"containerPort": 80, "hostPort": 80, "protocol": "TCP", "name": "http"},
-    {"containerPort": 443, "hostPort": 443, "protocol": "TCP", "name": "https"},
-    {"containerPort": 15090, "protocol": "TCP", "name": "http-envoy-prom"}
-  ]}
-]'
+    if [[ -n "$ADMIN_GATEWAY_IP" ]] && [[ -n "$USER_GATEWAY_IP" ]]; then
+        break
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+done
 
-# Wait for rollout
-log_info "Waiting for ingress gateway rollout..."
-kubectl rollout status deployment/istio-ingress -n istio-system --timeout=120s
-
-# Step 6: Update /etc/hosts if needed
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-if ! grep -q "k8s-dashboard.${SIAB_DOMAIN}" /etc/hosts; then
-    log_info "Adding k8s-dashboard to /etc/hosts..."
-    echo "${NODE_IP} k8s-dashboard.${SIAB_DOMAIN}" >> /etc/hosts
+# Fallback to node IP if LoadBalancer not available
+if [[ -z "$ADMIN_GATEWAY_IP" ]] || [[ -z "$USER_GATEWAY_IP" ]]; then
+    log_warn "LoadBalancer IPs not available. MetalLB may not be installed."
+    log_warn "Run the full install script to install MetalLB for dual-gateway support."
+    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    ADMIN_GATEWAY_IP="${NODE_IP}"
+    USER_GATEWAY_IP="${NODE_IP}"
 fi
-if ! grep -q "catalog.${SIAB_DOMAIN}" /etc/hosts; then
-    log_info "Adding catalog to /etc/hosts..."
-    echo "${NODE_IP} catalog.${SIAB_DOMAIN}" >> /etc/hosts
+
+log_info "Admin Gateway IP: ${ADMIN_GATEWAY_IP}"
+log_info "User Gateway IP: ${USER_GATEWAY_IP}"
+
+# Update /etc/hosts
+if ! grep -q "SIAB Admin Plane" /etc/hosts; then
+    log_info "Adding gateway entries to /etc/hosts..."
+    cat >> /etc/hosts <<EOF
+
+# SIAB Admin Plane (administrative services - restricted access)
+${ADMIN_GATEWAY_IP} keycloak.${SIAB_DOMAIN}
+${ADMIN_GATEWAY_IP} minio.${SIAB_DOMAIN}
+${ADMIN_GATEWAY_IP} grafana.${SIAB_DOMAIN}
+${ADMIN_GATEWAY_IP} k8s-dashboard.${SIAB_DOMAIN}
+
+# SIAB User Plane (user-facing services)
+${USER_GATEWAY_IP} ${SIAB_DOMAIN}
+${USER_GATEWAY_IP} dashboard.${SIAB_DOMAIN}
+${USER_GATEWAY_IP} catalog.${SIAB_DOMAIN}
+EOF
 fi
 
 # Step 7: Verify the configuration
@@ -263,21 +338,41 @@ echo "VirtualServices in istio-system:"
 kubectl get virtualservice -n istio-system
 
 echo ""
-echo "Ingress Gateway pods:"
-kubectl get pods -n istio-system -l istio=ingress
+echo "Gateways in istio-system:"
+kubectl get gateway -n istio-system
+
+echo ""
+echo "Admin Gateway pods:"
+kubectl get pods -n istio-system -l istio=ingress-admin 2>/dev/null || kubectl get pods -n istio-system -l istio=ingress
+
+echo ""
+echo "User Gateway pods:"
+kubectl get pods -n istio-system -l istio=ingress-user 2>/dev/null || true
+
+echo ""
+echo "LoadBalancer Services:"
+kubectl get svc -n istio-system | grep -E "istio-ingress|LoadBalancer"
 
 log_info "Fix complete!"
 echo ""
 echo "=================================="
-echo "Your /etc/hosts should include:"
-echo "${NODE_IP} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}"
+echo "Add these to /etc/hosts on client machines:"
 echo ""
-echo "Access your services at:"
-echo "  https://dashboard.${SIAB_DOMAIN}"
+echo "# Admin Plane (restricted access)"
+echo "${ADMIN_GATEWAY_IP} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}"
+echo ""
+echo "# User Plane"
+echo "${USER_GATEWAY_IP} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}"
+echo ""
+echo "Admin Plane Services (port 443):"
 echo "  https://grafana.${SIAB_DOMAIN}"
 echo "  https://keycloak.${SIAB_DOMAIN}"
 echo "  https://minio.${SIAB_DOMAIN}"
 echo "  https://k8s-dashboard.${SIAB_DOMAIN}"
+echo ""
+echo "User Plane Services (port 443):"
+echo "  https://dashboard.${SIAB_DOMAIN}"
+echo "  https://catalog.${SIAB_DOMAIN}"
 echo ""
 echo "Note: Accept the self-signed certificate warning in your browser"
 echo "=================================="

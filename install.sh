@@ -759,9 +759,78 @@ EOF
     log_info "cert-manager installed"
 }
 
-# Install Istio
+# Install MetalLB for LoadBalancer services
+install_metallb() {
+    log_step "Installing MetalLB..."
+
+    # Add MetalLB helm repo
+    helm repo add metallb https://metallb.github.io/metallb || true
+    helm repo update
+
+    # Create metallb-system namespace
+    kubectl create namespace metallb-system --dry-run=client -o yaml | kubectl apply -f -
+
+    # Install MetalLB
+    helm upgrade --install metallb metallb/metallb \
+        --namespace metallb-system \
+        --wait --timeout=300s
+
+    # Wait for MetalLB to be ready
+    log_info "Waiting for MetalLB controller to be ready..."
+    kubectl wait --for=condition=Available deployment/metallb-controller -n metallb-system --timeout=300s
+
+    # Get node IP for address pool
+    local node_ip
+    node_ip=$(hostname -I | awk '{print $1}')
+
+    # Create IP address pools for admin and user planes
+    # Admin plane: .240-.249, User plane: .250-.254
+    local ip_base="${node_ip%.*}"
+    log_info "Configuring MetalLB with IP pools based on ${ip_base}.x"
+
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: admin-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - ${ip_base}.240-${ip_base}.241
+  autoAssign: false
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: user-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - ${ip_base}.242-${ip_base}.243
+  autoAssign: false
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: siab-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - admin-pool
+    - user-pool
+EOF
+
+    # Save the IPs for later use
+    echo "ADMIN_GATEWAY_IP=${ip_base}.240" >> "${SIAB_CONFIG_DIR}/network.env"
+    echo "USER_GATEWAY_IP=${ip_base}.242" >> "${SIAB_CONFIG_DIR}/network.env"
+
+    log_info "MetalLB installed with admin pool (${ip_base}.240-241) and user pool (${ip_base}.242-243)"
+}
+
+# Install Istio with dual-gateway architecture (admin + user planes)
 install_istio() {
-    log_step "Installing Istio ${ISTIO_VERSION}..."
+    log_step "Installing Istio ${ISTIO_VERSION} with dual-gateway architecture..."
 
     # Install Istio base
     helm upgrade --install istio-base istio/base \
@@ -782,38 +851,60 @@ install_istio() {
         --set pilot.autoscaleMin=2 \
         --wait
 
-    # Wait for Istio to be ready
+    # Wait for Istio control plane to be ready
     kubectl wait --for=condition=Available deployment --all -n istio-system --timeout=300s
 
-    # Install Istio ingress gateway
-    # Note: We use ClusterIP service and add hostPort via patch for standard ports (80/443)
-    # replicaCount=1 is required because hostPort can only bind once per node
-    helm upgrade --install istio-ingress istio/gateway \
+    # Install ADMIN ingress gateway (for administrative interfaces)
+    log_info "Installing admin ingress gateway..."
+    helm upgrade --install istio-ingress-admin istio/gateway \
         --namespace istio-system \
         --version ${ISTIO_VERSION} \
-        --set replicaCount=1 \
-        --set service.type=ClusterIP \
+        --set replicaCount=2 \
+        --set service.type=LoadBalancer \
+        --set "service.annotations.metallb\\.universe\\.tf/address-pool=admin-pool" \
         --set "service.ports[0].name=http" \
         --set "service.ports[0].port=80" \
-        --set "service.ports[0].targetPort=80" \
+        --set "service.ports[0].targetPort=8080" \
         --set "service.ports[1].name=https" \
         --set "service.ports[1].port=443" \
-        --set "service.ports[1].targetPort=443" \
+        --set "service.ports[1].targetPort=8443" \
+        --set "labels.istio=ingress-admin" \
         --wait
 
-    # Patch the deployment to add hostPort binding for standard ports (80/443)
-    # This allows direct access without NodePort high ports
-    log_info "Configuring hostPort for standard ports 80/443..."
-    kubectl patch deployment istio-ingress -n istio-system --type='json' -p='[
-      {"op": "replace", "path": "/spec/template/spec/containers/0/ports", "value": [
-        {"containerPort": 80, "hostPort": 80, "protocol": "TCP", "name": "http"},
-        {"containerPort": 443, "hostPort": 443, "protocol": "TCP", "name": "https"},
-        {"containerPort": 15090, "protocol": "TCP", "name": "http-envoy-prom"}
-      ]}
-    ]'
+    # Install USER ingress gateway (for user applications)
+    log_info "Installing user ingress gateway..."
+    helm upgrade --install istio-ingress-user istio/gateway \
+        --namespace istio-system \
+        --version ${ISTIO_VERSION} \
+        --set replicaCount=2 \
+        --set service.type=LoadBalancer \
+        --set "service.annotations.metallb\\.universe\\.tf/address-pool=user-pool" \
+        --set "service.ports[0].name=http" \
+        --set "service.ports[0].port=80" \
+        --set "service.ports[0].targetPort=8080" \
+        --set "service.ports[1].name=https" \
+        --set "service.ports[1].port=443" \
+        --set "service.ports[1].targetPort=8443" \
+        --set "labels.istio=ingress-user" \
+        --wait
 
-    # Wait for gateway to be ready after patch
-    kubectl rollout status deployment/istio-ingress -n istio-system --timeout=120s
+    # Wait for gateways to get IPs
+    log_info "Waiting for LoadBalancer IPs to be assigned..."
+    local max_wait=120
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        local admin_ip=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+        local user_ip=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+        if [[ -n "$admin_ip" ]] && [[ -n "$user_ip" ]]; then
+            log_info "Admin gateway IP: ${admin_ip}"
+            log_info "User gateway IP: ${user_ip}"
+            echo "ADMIN_GATEWAY_ACTUAL_IP=${admin_ip}" >> "${SIAB_CONFIG_DIR}/network.env"
+            echo "USER_GATEWAY_ACTUAL_IP=${user_ip}" >> "${SIAB_CONFIG_DIR}/network.env"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
 
     # Apply strict mTLS policy
     cat <<EOF | kubectl apply -f -
@@ -827,7 +918,7 @@ spec:
     mode: STRICT
 EOF
 
-    log_info "Istio installed with strict mTLS"
+    log_info "Istio installed with admin and user gateways"
 }
 
 # Install Keycloak
@@ -1072,7 +1163,7 @@ spec:
   hosts:
     - "keycloak.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -1223,7 +1314,7 @@ spec:
   hosts:
     - "minio.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -1403,7 +1494,7 @@ spec:
   hosts:
     - "grafana.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -1501,7 +1592,7 @@ spec:
   hosts:
     - "k8s-dashboard.${SIAB_DOMAIN}"
   gateways:
-    - siab-gateway
+    - admin-gateway
   http:
     - route:
         - destination:
@@ -1654,42 +1745,11 @@ install_dashboard() {
     log_info "Dashboard setup complete"
 }
 
-# Create Istio Gateway
+# Create Istio Gateways (Admin and User planes)
 create_istio_gateway() {
-    log_step "Creating Istio Gateway..."
+    log_step "Creating Istio Gateways (Admin and User planes)..."
 
-    cat <<EOF | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: siab-gateway
-  namespace: istio-system
-spec:
-  selector:
-    istio: ingress
-  servers:
-    - port:
-        number: 443
-        name: https
-        protocol: HTTPS
-      tls:
-        mode: SIMPLE
-        credentialName: siab-gateway-cert
-      hosts:
-        - "*.${SIAB_DOMAIN}"
-        - "${SIAB_DOMAIN}"
-        - "*"
-    - port:
-        number: 80
-        name: http
-        protocol: HTTP
-      hosts:
-        - "*.${SIAB_DOMAIN}"
-        - "${SIAB_DOMAIN}"
-        - "*"
-EOF
-
-    # Create certificate for gateway
+    # Create certificate for gateways
     cat <<EOF | kubectl apply -f -
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -1705,20 +1765,121 @@ spec:
   dnsNames:
     - "*.${SIAB_DOMAIN}"
     - "${SIAB_DOMAIN}"
+    - "*.admin.${SIAB_DOMAIN}"
+    - "admin.${SIAB_DOMAIN}"
 EOF
 
-    # Create RequestAuthentication for JWT validation from Keycloak
-    # This allows but doesn't require JWT tokens - AuthorizationPolicy enforces requirements
+    # ADMIN Gateway - for administrative interfaces (Grafana, Keycloak, K8s Dashboard, MinIO)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: admin-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-admin
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: siab-gateway-cert
+      hosts:
+        - "grafana.${SIAB_DOMAIN}"
+        - "keycloak.${SIAB_DOMAIN}"
+        - "k8s-dashboard.${SIAB_DOMAIN}"
+        - "minio.${SIAB_DOMAIN}"
+        - "*.admin.${SIAB_DOMAIN}"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "grafana.${SIAB_DOMAIN}"
+        - "keycloak.${SIAB_DOMAIN}"
+        - "k8s-dashboard.${SIAB_DOMAIN}"
+        - "minio.${SIAB_DOMAIN}"
+        - "*.admin.${SIAB_DOMAIN}"
+EOF
+
+    # USER Gateway - for user applications and catalog
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: user-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-user
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: siab-gateway-cert
+      hosts:
+        - "${SIAB_DOMAIN}"
+        - "dashboard.${SIAB_DOMAIN}"
+        - "catalog.${SIAB_DOMAIN}"
+        - "*.apps.${SIAB_DOMAIN}"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "${SIAB_DOMAIN}"
+        - "dashboard.${SIAB_DOMAIN}"
+        - "catalog.${SIAB_DOMAIN}"
+        - "*.apps.${SIAB_DOMAIN}"
+EOF
+
+    # Legacy gateway for backward compatibility (routes to user gateway by default)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: siab-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-user
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: siab-gateway-cert
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+        - "${SIAB_DOMAIN}"
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*.${SIAB_DOMAIN}"
+        - "${SIAB_DOMAIN}"
+EOF
+
+    # Create RequestAuthentication for JWT validation from Keycloak (on admin gateway)
     cat <<EOF | kubectl apply -f -
 apiVersion: security.istio.io/v1beta1
 kind: RequestAuthentication
 metadata:
-  name: keycloak-jwt-auth
+  name: keycloak-jwt-auth-admin
   namespace: istio-system
 spec:
   selector:
     matchLabels:
-      istio: ingress
+      istio: ingress-admin
   jwtRules:
     - issuer: "https://keycloak.${SIAB_DOMAIN}/realms/siab"
       jwksUri: "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
@@ -1726,8 +1887,25 @@ spec:
       outputPayloadToHeader: x-jwt-payload
 EOF
 
-    # Create AuthorizationPolicy to allow unauthenticated access to Keycloak
-    # (users need to access Keycloak to authenticate)
+    # Create RequestAuthentication for JWT validation from Keycloak (on user gateway)
+    cat <<EOF | kubectl apply -f -
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-auth-user
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  jwtRules:
+    - issuer: "https://keycloak.${SIAB_DOMAIN}/realms/siab"
+      jwksUri: "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
+      forwardOriginalToken: true
+      outputPayloadToHeader: x-jwt-payload
+EOF
+
+    # Allow unauthenticated access to Keycloak (needed to login)
     cat <<EOF | kubectl apply -f -
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -1737,7 +1915,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      istio: ingress
+      istio: ingress-admin
   action: ALLOW
   rules:
     - to:
@@ -1747,8 +1925,7 @@ spec:
               - "keycloak.${SIAB_DOMAIN}:*"
 EOF
 
-    # Create AuthorizationPolicy to allow unauthenticated access to the main dashboard
-    # (landing page should be accessible to see what services are available)
+    # Allow unauthenticated access to user dashboard and catalog
     cat <<EOF | kubectl apply -f -
 apiVersion: security.istio.io/v1beta1
 kind: AuthorizationPolicy
@@ -1777,12 +1954,44 @@ EOF
 final_configuration() {
     log_step "Performing final configuration..."
 
+    # Get gateway IPs from MetalLB LoadBalancer services
+    local admin_gateway_ip user_gateway_ip
+    log_info "Waiting for gateway LoadBalancer IPs..."
+
+    # Wait up to 60 seconds for IPs to be assigned
+    local timeout=60
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        admin_gateway_ip=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        user_gateway_ip=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+        if [[ -n "$admin_gateway_ip" ]] && [[ -n "$user_gateway_ip" ]]; then
+            break
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    # Fallback to node IP if LoadBalancer IPs not available
+    if [[ -z "$admin_gateway_ip" ]] || [[ -z "$user_gateway_ip" ]]; then
+        log_warn "LoadBalancer IPs not available, falling back to node IP"
+        local node_ip
+        node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        admin_gateway_ip="${node_ip}"
+        user_gateway_ip="${node_ip}"
+    fi
+
+    log_info "Admin Gateway IP: ${admin_gateway_ip}"
+    log_info "User Gateway IP: ${user_gateway_ip}"
+
     # Save installation info
     cat > "${SIAB_CONFIG_DIR}/install-info.json" <<EOF
 {
   "version": "${SIAB_VERSION}",
   "installed_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "domain": "${SIAB_DOMAIN}",
+  "admin_gateway_ip": "${admin_gateway_ip}",
+  "user_gateway_ip": "${user_gateway_ip}",
   "components": {
     "rke2": "${RKE2_VERSION}",
     "istio": "${ISTIO_VERSION}",
@@ -1795,20 +2004,28 @@ final_configuration() {
 }
 EOF
 
-    # Add hosts entries for local access
-    if ! grep -q "${SIAB_DOMAIN}" /etc/hosts; then
-        local node_ip
-        node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    # Save gateway IPs to credentials file for siab-info script
+    cat >> "${SIAB_CONFIG_DIR}/credentials.env" <<EOF
+
+# Gateway IPs (MetalLB LoadBalancer)
+ADMIN_GATEWAY_IP="${admin_gateway_ip}"
+USER_GATEWAY_IP="${user_gateway_ip}"
+EOF
+
+    # Add hosts entries for local access - separate admin and user plane domains
+    if ! grep -q "SIAB Admin Plane" /etc/hosts; then
         cat >> /etc/hosts <<EOF
 
-# SIAB Platform
-${node_ip} ${SIAB_DOMAIN}
-${node_ip} keycloak.${SIAB_DOMAIN}
-${node_ip} minio.${SIAB_DOMAIN}
-${node_ip} grafana.${SIAB_DOMAIN}
-${node_ip} dashboard.${SIAB_DOMAIN}
-${node_ip} k8s-dashboard.${SIAB_DOMAIN}
-${node_ip} catalog.${SIAB_DOMAIN}
+# SIAB Admin Plane (administrative services - restricted access)
+${admin_gateway_ip} keycloak.${SIAB_DOMAIN}
+${admin_gateway_ip} minio.${SIAB_DOMAIN}
+${admin_gateway_ip} grafana.${SIAB_DOMAIN}
+${admin_gateway_ip} k8s-dashboard.${SIAB_DOMAIN}
+
+# SIAB User Plane (user-facing services)
+${user_gateway_ip} ${SIAB_DOMAIN}
+${user_gateway_ip} dashboard.${SIAB_DOMAIN}
+${user_gateway_ip} catalog.${SIAB_DOMAIN}
 EOF
     fi
 
@@ -1871,8 +2088,18 @@ EOF
 
 # Print completion message
 print_completion() {
-    local ingress_port
-    ingress_port=$(kubectl get svc -n istio-system istio-ingress -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}')
+    # Get gateway IPs from MetalLB LoadBalancer services
+    local admin_gateway_ip user_gateway_ip
+    admin_gateway_ip=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    user_gateway_ip=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+    # Fallback to node IP if needed
+    if [[ -z "$admin_gateway_ip" ]] || [[ -z "$user_gateway_ip" ]]; then
+        local node_ip
+        node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        admin_gateway_ip="${admin_gateway_ip:-$node_ip}"
+        user_gateway_ip="${user_gateway_ip:-$node_ip}"
+    fi
 
     # Get dashboard token
     local dashboard_token
@@ -1883,12 +2110,22 @@ print_completion() {
     echo -e "║          ${GREEN}SIAB Installation Complete!${NC}                          ║"
     echo "╚════════════════════════════════════════════════════════════════╝"
     echo ""
-    echo -e "${BLUE}▸ Web Interfaces${NC}"
+    echo -e "${BLUE}▸ Network Architecture${NC}"
     echo "  ─────────────────────────────────────────"
-    echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}:${ingress_port}"
-    echo "  K8s Dashboard:           https://dashboard.${SIAB_DOMAIN}:${ingress_port}"
-    echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}:${ingress_port}"
-    echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}:${ingress_port}"
+    echo "  Admin Gateway IP:  ${admin_gateway_ip} (restricted access)"
+    echo "  User Gateway IP:   ${user_gateway_ip} (user-facing apps)"
+    echo ""
+    echo -e "${BLUE}▸ Admin Plane Services (port 443)${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}"
+    echo "  K8s Dashboard:           https://k8s-dashboard.${SIAB_DOMAIN}"
+    echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}"
+    echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}"
+    echo ""
+    echo -e "${BLUE}▸ User Plane Services (port 443)${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  SIAB Dashboard:          https://dashboard.${SIAB_DOMAIN}"
+    echo "  App Catalog:             https://catalog.${SIAB_DOMAIN}"
     echo ""
     echo -e "${BLUE}▸ SIAB Commands${NC}"
     echo "  ─────────────────────────────────────────"
@@ -1925,10 +2162,13 @@ print_completion() {
         echo "  Then use kubectl, helm, k9s, siab-status without sudo"
         echo ""
     fi
-    echo -e "${YELLOW}Note: Add these hosts to /etc/hosts on client machines:${NC}"
-    local node_ip
-    node_ip=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-    echo "  ${node_ip} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN}"
+    echo -e "${YELLOW}▸ Add to /etc/hosts on client machines:${NC}"
+    echo "  ─────────────────────────────────────────"
+    echo "  # Admin Plane (restricted)"
+    echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}"
+    echo ""
+    echo "  # User Plane"
+    echo "  ${user_gateway_ip} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}"
     echo ""
     echo "════════════════════════════════════════════════════════════════"
     echo "  Thank you for installing SIAB - Secure Infrastructure as a Box"
@@ -1956,6 +2196,7 @@ main() {
     generate_credentials
     create_namespaces
     install_cert_manager
+    install_metallb
     install_istio
     create_istio_gateway
     install_keycloak

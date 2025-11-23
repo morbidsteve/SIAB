@@ -25,14 +25,28 @@ if [[ -f /etc/rancher/rke2/rke2.yaml ]] && [[ ! -f ~/.kube/config ]]; then
     export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 fi
 
-# Get node IP
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
-
-# Get domain from config
+# Get domain and gateway IPs from config
 SIAB_DOMAIN="siab.local"
+ADMIN_GATEWAY_IP=""
+USER_GATEWAY_IP=""
 if [[ -f /etc/siab/credentials.env ]]; then
     source /etc/siab/credentials.env 2>/dev/null
     SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
+fi
+
+# Try to get gateway IPs from LoadBalancer services if not in credentials
+if [[ -z "$ADMIN_GATEWAY_IP" ]]; then
+    ADMIN_GATEWAY_IP=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+fi
+if [[ -z "$USER_GATEWAY_IP" ]]; then
+    USER_GATEWAY_IP=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+fi
+
+# Fallback to node IP if LoadBalancer IPs not available
+if [[ -z "$ADMIN_GATEWAY_IP" ]] || [[ -z "$USER_GATEWAY_IP" ]]; then
+    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+    ADMIN_GATEWAY_IP="${ADMIN_GATEWAY_IP:-$NODE_IP}"
+    USER_GATEWAY_IP="${USER_GATEWAY_IP:-$NODE_IP}"
 fi
 
 echo ""
@@ -41,46 +55,65 @@ echo -e "${CYAN}║              SIAB - Access Information                      
 echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Network Architecture
+echo -e "${BLUE}▸ Network Architecture${NC}"
+echo "  ─────────────────────────────────────────────────────────────"
+echo ""
+echo "  Admin Gateway IP:  ${ADMIN_GATEWAY_IP} (administrative services)"
+echo "  User Gateway IP:   ${USER_GATEWAY_IP} (user-facing applications)"
+echo ""
+
 # /etc/hosts entry
 echo -e "${BLUE}▸ Add to /etc/hosts (on your client machine)${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
-echo -e "  ${GREEN}${NODE_IP} ${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}${NC}"
+echo -e "  ${GREEN}# Admin Plane (restricted access)${NC}"
+echo -e "  ${GREEN}${ADMIN_GATEWAY_IP} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}${NC}"
+echo ""
+echo -e "  ${GREEN}# User Plane${NC}"
+echo -e "  ${GREEN}${USER_GATEWAY_IP} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}${NC}"
 echo ""
 echo "  Windows: C:\\Windows\\System32\\drivers\\etc\\hosts"
 echo "  Linux/Mac: /etc/hosts"
 echo ""
 
-# Web URLs - Now using standard ports (80/443) via hostPort
-echo -e "${BLUE}▸ Web Interfaces (standard HTTPS port 443)${NC}"
+# Admin Plane Services
+echo -e "${BLUE}▸ Admin Plane Services (port 443) - RESTRICTED${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
-echo "  SIAB Dashboard:          https://dashboard.${SIAB_DOMAIN}"
 echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}"
 echo "  Kubernetes Dashboard:    https://k8s-dashboard.${SIAB_DOMAIN}"
 echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}"
 echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}"
+echo ""
+
+# User Plane Services
+echo -e "${BLUE}▸ User Plane Services (port 443)${NC}"
+echo "  ─────────────────────────────────────────────────────────────"
+echo ""
+echo "  SIAB Dashboard:          https://dashboard.${SIAB_DOMAIN}"
 echo "  App Catalog:             https://catalog.${SIAB_DOMAIN}"
 echo ""
 echo -e "${YELLOW}Note: Accept the self-signed certificate warning in your browser${NC}"
 echo ""
 
-# Direct IP access (port-forward alternative)
-echo -e "${BLUE}▸ Direct IP Access (via port-forward)${NC}"
+# Direct IP access (port-forward alternative for troubleshooting)
+SERVER_IP="${ADMIN_GATEWAY_IP:-localhost}"
+echo -e "${BLUE}▸ Direct IP Access (via port-forward - for troubleshooting)${NC}"
 echo "  ─────────────────────────────────────────────────────────────"
 echo ""
 echo "  Run these commands on the server, then access from browser:"
 echo ""
-echo "  # Grafana - http://${NODE_IP}:3000"
+echo "  # Grafana - http://${SERVER_IP}:3000"
 echo "  kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80 --address 0.0.0.0"
 echo ""
-echo "  # Keycloak - http://${NODE_IP}:8080"
+echo "  # Keycloak - http://${SERVER_IP}:8080"
 echo "  kubectl port-forward -n keycloak svc/keycloak 8080:80 --address 0.0.0.0"
 echo ""
-echo "  # MinIO Console - http://${NODE_IP}:9001"
+echo "  # MinIO Console - http://${SERVER_IP}:9001"
 echo "  kubectl port-forward -n minio svc/minio-console 9001:9001 --address 0.0.0.0"
 echo ""
-echo "  # K8s Dashboard - https://${NODE_IP}:8443"
+echo "  # K8s Dashboard - https://${SERVER_IP}:8443"
 echo "  kubectl port-forward -n kubernetes-dashboard svc/kubernetes-dashboard-kong-proxy 8443:443 --address 0.0.0.0"
 echo ""
 

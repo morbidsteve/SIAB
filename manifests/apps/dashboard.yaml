@@ -93,7 +93,7 @@ spec:
     - "dashboard.siab.local"
     - "siab.local"
   gateways:
-    - siab-gateway
+    - user-gateway
   http:
     - match:
         - uri:
