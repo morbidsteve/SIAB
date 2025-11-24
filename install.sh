@@ -63,12 +63,14 @@ readonly GATEKEEPER_VERSION="${GATEKEEPER_VERSION:-3.14.0}"
 readonly CERTMANAGER_VERSION="${CERTMANAGER_VERSION:-v1.13.3}"
 readonly PROMETHEUS_STACK_VERSION="${PROMETHEUS_STACK_VERSION:-56.6.2}"
 readonly KUBE_DASHBOARD_VERSION="${KUBE_DASHBOARD_VERSION:-7.1.0}"
+readonly LONGHORN_VERSION="${LONGHORN_VERSION:-1.5.3}"
 
 # Configuration
 SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
 SIAB_ADMIN_EMAIL="${SIAB_ADMIN_EMAIL:-admin@${SIAB_DOMAIN}}"
 SIAB_SKIP_MONITORING="${SIAB_SKIP_MONITORING:-false}"
 SIAB_SKIP_STORAGE="${SIAB_SKIP_STORAGE:-false}"
+SIAB_SKIP_LONGHORN="${SIAB_SKIP_LONGHORN:-false}"
 SIAB_MINIO_SIZE="${SIAB_MINIO_SIZE:-20Gi}"
 SIAB_SINGLE_NODE="${SIAB_SINGLE_NODE:-true}"
 
@@ -104,6 +106,7 @@ declare -a INSTALL_STEPS=(
     "Kubernetes Namespaces"
     "cert-manager"
     "MetalLB Load Balancer"
+    "Longhorn Block Storage"
     "Istio Service Mesh"
     "Istio Gateways"
     "Keycloak Identity"
@@ -802,6 +805,26 @@ vm.panic_on_oom = 0
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+
+# Increase inotify limits to prevent "Too many open files" errors
+# Required for Kubernetes, Longhorn, and monitoring tools
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+fs.file-max = 2097152
+EOF
+
+    # Set ulimits for the system to prevent file descriptor exhaustion
+    log_info "Configuring system limits..."
+    cat > /etc/security/limits.d/90-rke2.conf <<EOF
+# Increase file descriptor limits for Kubernetes
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+root soft nproc 1048576
+root hard nproc 1048576
 EOF
 
     # Load required kernel modules
@@ -955,6 +978,62 @@ EOF
     log_info "RKE2 installed successfully"
 }
 
+# Configure Calico/Canal for proper connectivity
+configure_calico_network() {
+    log_step "Configuring Calico/Canal network for optimal connectivity..."
+
+    # Wait for Calico to be ready before configuring
+    log_info "Waiting for Canal/Calico pods to be ready..."
+    local max_wait=120
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        local canal_ready=$(kubectl get pods -n kube-system -l k8s-app=canal --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+        if [[ $canal_ready -ge 1 ]]; then
+            log_info "Canal/Calico is ready"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    # Create GlobalNetworkPolicy to allow all pod traffic
+    # This prevents connectivity issues while maintaining Kubernetes NetworkPolicies
+    log_info "Creating Calico GlobalNetworkPolicy for pod communication..."
+    cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-all-pods
+spec:
+  order: 1
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+  egress:
+    - action: Allow
+EOF
+
+    # Configure Felix for optimal connectivity
+    log_info "Configuring Calico Felix for optimal performance..."
+    cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  defaultEndpointToHostAction: Accept
+  iptablesFilterAllowAction: Accept
+  iptablesMangleAllowAction: Accept
+  logSeverityScreen: Info
+  reportingInterval: 0s
+EOF
+
+    log_info "Calico/Canal network configured for optimal connectivity"
+}
+
 # Install Helm
 install_helm() {
     start_step "Helm Package Manager"
@@ -1104,13 +1183,39 @@ EOF
 create_namespaces() {
     log_step "Creating namespaces..."
 
-    kubectl create namespace siab-system --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace trivy-system --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace gatekeeper-system --dry-run=client -o yaml | kubectl apply -f -
+    # Create all required namespaces
+    local namespaces=(
+        "siab-system"
+        "keycloak"
+        "minio"
+        "monitoring"
+        "cert-manager"
+        "trivy-system"
+        "gatekeeper-system"
+    )
+
+    for ns in "${namespaces[@]}"; do
+        kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    done
+
+    # Create allow-all-ingress network policies for backend services
+    # This ensures Istio gateways can reach backend services
+    log_info "Creating network policies for service connectivity..."
+    for ns in siab-system keycloak minio monitoring istio-system; do
+        cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-ingress
+  namespace: $ns
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - {}
+EOF
+    done
 
     # Label namespaces for Istio injection
     # Note: keycloak, minio, and monitoring have Istio disabled to avoid sidecar issues with their jobs
@@ -1263,6 +1368,111 @@ EOF
 
     complete_step "MetalLB Load Balancer"
     log_info "MetalLB installed with admin pool (${ip_base}.240-241) and user pool (${ip_base}.242-243)"
+}
+
+# Install Longhorn for block storage
+install_longhorn() {
+    start_step "Longhorn Block Storage"
+
+    if [[ "${SIAB_SKIP_LONGHORN}" == "true" ]]; then
+        skip_step "Longhorn Block Storage" "Skipped by configuration"
+        return 0
+    fi
+
+    # Check if Longhorn is already installed
+    if kubectl get namespace longhorn-system &>/dev/null; then
+        if kubectl get deployment longhorn-driver-deployer -n longhorn-system &>/dev/null 2>&1; then
+            skip_step "Longhorn Block Storage" "Already installed"
+            return 0
+        fi
+    fi
+
+    log_step "Installing Longhorn ${LONGHORN_VERSION}..."
+
+    # Install prerequisites based on OS family
+    log_info "Installing iSCSI and NFS prerequisites..."
+    case "${OS_FAMILY}" in
+        rhel)
+            ${PKG_MANAGER} install -y iscsi-initiator-utils nfs-utils || true
+            ;;
+        debian)
+            apt-get update && apt-get install -y open-iscsi nfs-common || true
+            ;;
+    esac
+
+    # Enable and start iscsid service
+    systemctl enable iscsid 2>/dev/null || true
+    systemctl start iscsid 2>/dev/null || true
+
+    # Add Longhorn Helm repository
+    helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
+    helm repo update
+
+    # Create longhorn-system namespace
+    kubectl create namespace longhorn-system --dry-run=client -o yaml | kubectl apply -f -
+
+    # Install Longhorn with single-node optimized settings
+    log_info "Installing Longhorn chart..."
+    helm upgrade --install longhorn longhorn/longhorn \
+        --namespace longhorn-system \
+        --version ${LONGHORN_VERSION} \
+        --set defaultSettings.defaultDataPath="/var/lib/longhorn" \
+        --set defaultSettings.replicaReplenishmentWaitInterval=60 \
+        --set defaultSettings.defaultReplicaCount=1 \
+        --set persistence.defaultClass=true \
+        --set persistence.defaultClassReplicaCount=1 \
+        --set csi.kubeletRootDir="/var/lib/kubelet" \
+        --set defaultSettings.guaranteedInstanceManagerCPU=5 \
+        --set ingress.enabled=false \
+        --wait --timeout=600s
+
+    # Wait for Longhorn components to be ready
+    log_info "Waiting for Longhorn components to be ready..."
+    kubectl wait --for=condition=Ready pod -l app=longhorn-manager -n longhorn-system --timeout=300s || true
+
+    # Set Longhorn as default StorageClass
+    log_info "Setting Longhorn as default StorageClass..."
+    kubectl patch storageclass longhorn -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' 2>/dev/null || true
+
+    # Remove local-path as default if it exists
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' 2>/dev/null || true
+
+    # Create DestinationRule for Longhorn UI (no sidecar)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: longhorn-disable-mtls
+  namespace: istio-system
+spec:
+  host: longhorn-frontend.longhorn-system.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
+    # Create VirtualService for Longhorn UI on admin plane
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: longhorn-ui
+  namespace: istio-system
+spec:
+  hosts:
+    - "longhorn.${SIAB_DOMAIN}"
+  gateways:
+    - admin-gateway
+  http:
+    - route:
+        - destination:
+            host: longhorn-frontend.longhorn-system.svc.cluster.local
+            port:
+              number: 80
+EOF
+
+    complete_step "Longhorn Block Storage"
+    log_info "Longhorn block storage installed and configured as default StorageClass"
 }
 
 # Install Istio with dual-gateway architecture (admin + user planes)
@@ -2318,6 +2528,7 @@ spec:
         - "keycloak.${SIAB_DOMAIN}"
         - "k8s-dashboard.${SIAB_DOMAIN}"
         - "minio.${SIAB_DOMAIN}"
+        - "longhorn.${SIAB_DOMAIN}"
         - "*.admin.${SIAB_DOMAIN}"
     - port:
         number: 80
@@ -2328,6 +2539,7 @@ spec:
         - "keycloak.${SIAB_DOMAIN}"
         - "k8s-dashboard.${SIAB_DOMAIN}"
         - "minio.${SIAB_DOMAIN}"
+        - "longhorn.${SIAB_DOMAIN}"
         - "*.admin.${SIAB_DOMAIN}"
 EOF
 
@@ -2473,8 +2685,40 @@ spec:
               - "dashboard.${SIAB_DOMAIN}:*"
 EOF
 
+    # Create Istio AuthorizationPolicies to allow traffic through gateways
+    log_info "Creating Istio authorization policies..."
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-admin-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  action: ALLOW
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-user-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+    - {}
+EOF
+
     complete_step "Istio Gateways"
     log_info "Istio Gateway and authentication created"
+    log_info "Authorization policies configured for gateway access"
 }
 
 # Final configuration
@@ -2650,7 +2894,8 @@ print_completion() {
     echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}"
     echo "  K8s Dashboard:           https://k8s-dashboard.${SIAB_DOMAIN}"
     echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}"
-    echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}"
+    echo "  MinIO (S3 Storage):      https://minio.${SIAB_DOMAIN}"
+    echo "  Longhorn (Block Storage):https://longhorn.${SIAB_DOMAIN}"
     echo ""
     echo -e "${BLUE}▸ User Plane Services (port 443)${NC}"
     echo "  ─────────────────────────────────────────"
@@ -2695,10 +2940,11 @@ print_completion() {
     fi
     echo -e "${YELLOW}▸ Add to /etc/hosts on client machines:${NC}"
     echo "  ─────────────────────────────────────────"
-    echo "  # Admin Plane (restricted)"
-    echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}"
     echo ""
-    echo "  # User Plane"
+    echo "Admin Plane (restricted)"
+    echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} longhorn.${SIAB_DOMAIN}"
+    echo ""
+    echo "User Plane"
     echo "  ${user_gateway_ip} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}"
     echo ""
     echo "════════════════════════════════════════════════════════════════"
@@ -2753,6 +2999,10 @@ main() {
 
     # Core Infrastructure
     install_rke2
+
+    # Configure Calico/Canal network after RKE2 is running
+    configure_calico_network
+
     install_helm
     install_k9s
 
@@ -2769,6 +3019,7 @@ main() {
     # Kubernetes Components
     install_cert_manager
     install_metallb
+    install_longhorn
     install_istio
     create_istio_gateway
 
