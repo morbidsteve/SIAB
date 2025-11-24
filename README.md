@@ -294,6 +294,7 @@ sudo ./uninstall.sh
 ## Documentation
 
 - [Getting Started](./docs/getting-started.md) - Installation and first deployment
+- [External VM Access](./docs/external-vm-access.md) - Access SIAB from another VM or remote machine
 - [Bare Metal Provisioning](./docs/bare-metal-provisioning.md) - Deploy on unprovisioned hardware
 - [GUI Provisioner](./docs/gui-provisioner.md) - Using the graphical interface
 - [Application Catalog](./catalog/README.md) - One-click app deployment
