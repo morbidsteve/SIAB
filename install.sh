@@ -810,6 +810,7 @@ net.bridge.bridge-nf-call-ip6tables = 1
 # Required for Kubernetes, Longhorn, and monitoring tools
 fs.inotify.max_user_watches = 524288
 fs.inotify.max_user_instances = 512
+fs.inotify.max_queued_events = 32768
 fs.file-max = 2097152
 EOF
 
@@ -2133,6 +2134,10 @@ install_monitoring() {
         --set grafana.persistence.enabled=false \
         --set grafana.sidecar.dashboards.enabled=true \
         --set grafana.sidecar.dashboards.searchNamespace=ALL \
+        --set grafana.grafana\.ini.auth\.anonymous.enabled=true \
+        --set grafana.grafana\.ini.auth\.anonymous.org_role=Viewer \
+        --set grafana.grafana\.ini.server.root_url=https://grafana.${SIAB_DOMAIN} \
+        --set grafana.grafana\.ini.server.serve_from_sub_path=false \
         --set alertmanager.enabled=true \
         --set alertmanager.alertmanagerSpec.retention=120h \
         --set nodeExporter.enabled=true \
@@ -2673,7 +2678,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      istio: ingress
+      istio: ingress-user
   action: ALLOW
   rules:
     - to:
@@ -2683,6 +2688,8 @@ spec:
               - "${SIAB_DOMAIN}:*"
               - "dashboard.${SIAB_DOMAIN}"
               - "dashboard.${SIAB_DOMAIN}:*"
+              - "catalog.${SIAB_DOMAIN}"
+              - "catalog.${SIAB_DOMAIN}:*"
 EOF
 
     # Create Istio AuthorizationPolicies to allow traffic through gateways
