@@ -805,6 +805,26 @@ vm.panic_on_oom = 0
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+
+# Increase inotify limits to prevent "Too many open files" errors
+# Required for Kubernetes, Longhorn, and monitoring tools
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+fs.file-max = 2097152
+EOF
+
+    # Set ulimits for the system to prevent file descriptor exhaustion
+    log_info "Configuring system limits..."
+    cat > /etc/security/limits.d/90-rke2.conf <<EOF
+# Increase file descriptor limits for Kubernetes
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 1048576
+* hard nproc 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+root soft nproc 1048576
+root hard nproc 1048576
 EOF
 
     # Load required kernel modules
@@ -958,6 +978,62 @@ EOF
     log_info "RKE2 installed successfully"
 }
 
+# Configure Calico/Canal for proper connectivity
+configure_calico_network() {
+    log_step "Configuring Calico/Canal network for optimal connectivity..."
+
+    # Wait for Calico to be ready before configuring
+    log_info "Waiting for Canal/Calico pods to be ready..."
+    local max_wait=120
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        local canal_ready=$(kubectl get pods -n kube-system -l k8s-app=canal --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+        if [[ $canal_ready -ge 1 ]]; then
+            log_info "Canal/Calico is ready"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    # Create GlobalNetworkPolicy to allow all pod traffic
+    # This prevents connectivity issues while maintaining Kubernetes NetworkPolicies
+    log_info "Creating Calico GlobalNetworkPolicy for pod communication..."
+    cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-all-pods
+spec:
+  order: 1
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+  egress:
+    - action: Allow
+EOF
+
+    # Configure Felix for optimal connectivity
+    log_info "Configuring Calico Felix for optimal performance..."
+    cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  defaultEndpointToHostAction: Accept
+  iptablesFilterAllowAction: Accept
+  iptablesMangleAllowAction: Accept
+  logSeverityScreen: Info
+  reportingInterval: 0s
+EOF
+
+    log_info "Calico/Canal network configured for optimal connectivity"
+}
+
 # Install Helm
 install_helm() {
     start_step "Helm Package Manager"
@@ -1107,13 +1183,39 @@ EOF
 create_namespaces() {
     log_step "Creating namespaces..."
 
-    kubectl create namespace siab-system --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace trivy-system --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create namespace gatekeeper-system --dry-run=client -o yaml | kubectl apply -f -
+    # Create all required namespaces
+    local namespaces=(
+        "siab-system"
+        "keycloak"
+        "minio"
+        "monitoring"
+        "cert-manager"
+        "trivy-system"
+        "gatekeeper-system"
+    )
+
+    for ns in "${namespaces[@]}"; do
+        kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    done
+
+    # Create allow-all-ingress network policies for backend services
+    # This ensures Istio gateways can reach backend services
+    log_info "Creating network policies for service connectivity..."
+    for ns in siab-system keycloak minio monitoring istio-system; do
+        cat <<EOF | kubectl apply -f - 2>/dev/null || true
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-ingress
+  namespace: $ns
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - {}
+EOF
+    done
 
     # Label namespaces for Istio injection
     # Note: keycloak, minio, and monitoring have Istio disabled to avoid sidecar issues with their jobs
@@ -2426,6 +2528,7 @@ spec:
         - "keycloak.${SIAB_DOMAIN}"
         - "k8s-dashboard.${SIAB_DOMAIN}"
         - "minio.${SIAB_DOMAIN}"
+        - "longhorn.${SIAB_DOMAIN}"
         - "*.admin.${SIAB_DOMAIN}"
     - port:
         number: 80
@@ -2436,6 +2539,7 @@ spec:
         - "keycloak.${SIAB_DOMAIN}"
         - "k8s-dashboard.${SIAB_DOMAIN}"
         - "minio.${SIAB_DOMAIN}"
+        - "longhorn.${SIAB_DOMAIN}"
         - "*.admin.${SIAB_DOMAIN}"
 EOF
 
@@ -2581,8 +2685,40 @@ spec:
               - "dashboard.${SIAB_DOMAIN}:*"
 EOF
 
+    # Create Istio AuthorizationPolicies to allow traffic through gateways
+    log_info "Creating Istio authorization policies..."
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-admin-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  action: ALLOW
+  rules:
+    - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-user-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+    - {}
+EOF
+
     complete_step "Istio Gateways"
     log_info "Istio Gateway and authentication created"
+    log_info "Authorization policies configured for gateway access"
 }
 
 # Final configuration
@@ -2863,6 +2999,10 @@ main() {
 
     # Core Infrastructure
     install_rke2
+
+    # Configure Calico/Canal network after RKE2 is running
+    configure_calico_network
+
     install_helm
     install_k9s
 
