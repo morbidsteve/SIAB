@@ -240,6 +240,16 @@ Default admin credentials are generated during installation and stored in:
 /etc/siab/credentials.env
 ```
 
+### Verify Installation
+
+Run the comprehensive test suite to validate all components:
+
+```bash
+sudo ./siab-test.sh
+```
+
+This validates networking, storage, security, endpoints, and all services. See [Testing Guide](./docs/testing-guide.md) for details.
+
 ## Security Features
 
 - **Pod Security Standards**: Enforced restricted profile
@@ -295,6 +305,7 @@ sudo ./uninstall.sh
 
 - [Getting Started](./docs/getting-started.md) - Installation and first deployment
 - [External VM Access](./docs/external-vm-access.md) - Access SIAB from another VM or remote machine
+- [Testing Guide](./docs/testing-guide.md) - Comprehensive testing and validation
 - [Bare Metal Provisioning](./docs/bare-metal-provisioning.md) - Deploy on unprovisioned hardware
 - [GUI Provisioner](./docs/gui-provisioner.md) - Using the graphical interface
 - [Application Catalog](./catalog/README.md) - One-click app deployment
