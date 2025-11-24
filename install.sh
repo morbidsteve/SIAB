@@ -63,12 +63,14 @@ readonly GATEKEEPER_VERSION="${GATEKEEPER_VERSION:-3.14.0}"
 readonly CERTMANAGER_VERSION="${CERTMANAGER_VERSION:-v1.13.3}"
 readonly PROMETHEUS_STACK_VERSION="${PROMETHEUS_STACK_VERSION:-56.6.2}"
 readonly KUBE_DASHBOARD_VERSION="${KUBE_DASHBOARD_VERSION:-7.1.0}"
+readonly LONGHORN_VERSION="${LONGHORN_VERSION:-1.5.3}"
 
 # Configuration
 SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
 SIAB_ADMIN_EMAIL="${SIAB_ADMIN_EMAIL:-admin@${SIAB_DOMAIN}}"
 SIAB_SKIP_MONITORING="${SIAB_SKIP_MONITORING:-false}"
 SIAB_SKIP_STORAGE="${SIAB_SKIP_STORAGE:-false}"
+SIAB_SKIP_LONGHORN="${SIAB_SKIP_LONGHORN:-false}"
 SIAB_MINIO_SIZE="${SIAB_MINIO_SIZE:-20Gi}"
 SIAB_SINGLE_NODE="${SIAB_SINGLE_NODE:-true}"
 
@@ -104,6 +106,7 @@ declare -a INSTALL_STEPS=(
     "Kubernetes Namespaces"
     "cert-manager"
     "MetalLB Load Balancer"
+    "Longhorn Block Storage"
     "Istio Service Mesh"
     "Istio Gateways"
     "Keycloak Identity"
@@ -1263,6 +1266,111 @@ EOF
 
     complete_step "MetalLB Load Balancer"
     log_info "MetalLB installed with admin pool (${ip_base}.240-241) and user pool (${ip_base}.242-243)"
+}
+
+# Install Longhorn for block storage
+install_longhorn() {
+    start_step "Longhorn Block Storage"
+
+    if [[ "${SIAB_SKIP_LONGHORN}" == "true" ]]; then
+        skip_step "Longhorn Block Storage" "Skipped by configuration"
+        return 0
+    fi
+
+    # Check if Longhorn is already installed
+    if kubectl get namespace longhorn-system &>/dev/null; then
+        if kubectl get deployment longhorn-driver-deployer -n longhorn-system &>/dev/null 2>&1; then
+            skip_step "Longhorn Block Storage" "Already installed"
+            return 0
+        fi
+    fi
+
+    log_step "Installing Longhorn ${LONGHORN_VERSION}..."
+
+    # Install prerequisites based on OS family
+    log_info "Installing iSCSI and NFS prerequisites..."
+    case "${OS_FAMILY}" in
+        rhel)
+            ${PKG_MANAGER} install -y iscsi-initiator-utils nfs-utils || true
+            ;;
+        debian)
+            apt-get update && apt-get install -y open-iscsi nfs-common || true
+            ;;
+    esac
+
+    # Enable and start iscsid service
+    systemctl enable iscsid 2>/dev/null || true
+    systemctl start iscsid 2>/dev/null || true
+
+    # Add Longhorn Helm repository
+    helm repo add longhorn https://charts.longhorn.io 2>/dev/null || true
+    helm repo update
+
+    # Create longhorn-system namespace
+    kubectl create namespace longhorn-system --dry-run=client -o yaml | kubectl apply -f -
+
+    # Install Longhorn with single-node optimized settings
+    log_info "Installing Longhorn chart..."
+    helm upgrade --install longhorn longhorn/longhorn \
+        --namespace longhorn-system \
+        --version ${LONGHORN_VERSION} \
+        --set defaultSettings.defaultDataPath="/var/lib/longhorn" \
+        --set defaultSettings.replicaReplenishmentWaitInterval=60 \
+        --set defaultSettings.defaultReplicaCount=1 \
+        --set persistence.defaultClass=true \
+        --set persistence.defaultClassReplicaCount=1 \
+        --set csi.kubeletRootDir="/var/lib/kubelet" \
+        --set defaultSettings.guaranteedInstanceManagerCPU=5 \
+        --set ingress.enabled=false \
+        --wait --timeout=600s
+
+    # Wait for Longhorn components to be ready
+    log_info "Waiting for Longhorn components to be ready..."
+    kubectl wait --for=condition=Ready pod -l app=longhorn-manager -n longhorn-system --timeout=300s || true
+
+    # Set Longhorn as default StorageClass
+    log_info "Setting Longhorn as default StorageClass..."
+    kubectl patch storageclass longhorn -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' 2>/dev/null || true
+
+    # Remove local-path as default if it exists
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' 2>/dev/null || true
+
+    # Create DestinationRule for Longhorn UI (no sidecar)
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: longhorn-disable-mtls
+  namespace: istio-system
+spec:
+  host: longhorn-frontend.longhorn-system.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
+    # Create VirtualService for Longhorn UI on admin plane
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: longhorn-ui
+  namespace: istio-system
+spec:
+  hosts:
+    - "longhorn.${SIAB_DOMAIN}"
+  gateways:
+    - admin-gateway
+  http:
+    - route:
+        - destination:
+            host: longhorn-frontend.longhorn-system.svc.cluster.local
+            port:
+              number: 80
+EOF
+
+    complete_step "Longhorn Block Storage"
+    log_info "Longhorn block storage installed and configured as default StorageClass"
 }
 
 # Install Istio with dual-gateway architecture (admin + user planes)
@@ -2650,7 +2758,8 @@ print_completion() {
     echo "  Grafana (Monitoring):    https://grafana.${SIAB_DOMAIN}"
     echo "  K8s Dashboard:           https://k8s-dashboard.${SIAB_DOMAIN}"
     echo "  Keycloak (Identity):     https://keycloak.${SIAB_DOMAIN}"
-    echo "  MinIO (Storage):         https://minio.${SIAB_DOMAIN}"
+    echo "  MinIO (S3 Storage):      https://minio.${SIAB_DOMAIN}"
+    echo "  Longhorn (Block Storage):https://longhorn.${SIAB_DOMAIN}"
     echo ""
     echo -e "${BLUE}▸ User Plane Services (port 443)${NC}"
     echo "  ─────────────────────────────────────────"
@@ -2695,10 +2804,11 @@ print_completion() {
     fi
     echo -e "${YELLOW}▸ Add to /etc/hosts on client machines:${NC}"
     echo "  ─────────────────────────────────────────"
-    echo "  # Admin Plane (restricted)"
-    echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}"
     echo ""
-    echo "  # User Plane"
+    echo "Admin Plane (restricted)"
+    echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} longhorn.${SIAB_DOMAIN}"
+    echo ""
+    echo "User Plane"
     echo "  ${user_gateway_ip} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN}"
     echo ""
     echo "════════════════════════════════════════════════════════════════"
@@ -2769,6 +2879,7 @@ main() {
     # Kubernetes Components
     install_cert_manager
     install_metallb
+    install_longhorn
     install_istio
     create_istio_gateway
 
