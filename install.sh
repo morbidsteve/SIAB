@@ -2728,6 +2728,86 @@ EOF
     log_info "Authorization policies configured for gateway access"
 }
 
+# Fix Istio mTLS for services without sidecars
+fix_istio_mtls_for_non_sidecar_services() {
+    log_info "Configuring mTLS exceptions for services without Istio sidecars..."
+
+    # Create DestinationRules to disable mTLS for services in namespaces without Istio injection
+    # This is necessary because these namespaces have istio-injection=disabled but Istio
+    # is configured with STRICT mTLS globally
+
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: keycloak-mtls-disable
+  namespace: istio-system
+spec:
+  host: keycloak.keycloak.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: minio-mtls-disable
+  namespace: istio-system
+spec:
+  host: minio.minio.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: minio-console-mtls-disable
+  namespace: istio-system
+spec:
+  host: minio-console.minio.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: grafana-mtls-disable
+  namespace: istio-system
+spec:
+  host: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: prometheus-mtls-disable
+  namespace: istio-system
+spec:
+  host: kube-prometheus-stack-prometheus.monitoring.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: longhorn-mtls-disable
+  namespace: istio-system
+spec:
+  host: longhorn-frontend.longhorn-system.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+EOF
+
+    log_info "mTLS exceptions configured for non-sidecar services"
+}
+
 # Final configuration
 final_configuration() {
     start_step "Final Configuration"
@@ -3029,6 +3109,7 @@ main() {
     install_longhorn
     install_istio
     create_istio_gateway
+    fix_istio_mtls_for_non_sidecar_services
 
     # Applications
     install_keycloak
