@@ -2805,7 +2805,95 @@ spec:
       mode: DISABLE
 EOF
 
-    log_info "mTLS exceptions configured for non-sidecar services"
+    # Configure PeerAuthentication to allow PERMISSIVE mTLS for namespaces without sidecars
+    log_info "Configuring PERMISSIVE mTLS for namespaces without sidecars..."
+
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: allow-plain-text
+  namespace: keycloak
+spec:
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: allow-plain-text
+  namespace: minio
+spec:
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: allow-plain-text
+  namespace: monitoring
+spec:
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: allow-plain-text
+  namespace: longhorn-system
+spec:
+  mtls:
+    mode: PERMISSIVE
+EOF
+
+    # Add AuthorizationPolicies to allow traffic to these namespaces
+    log_info "Configuring AuthorizationPolicies for service namespaces..."
+
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all
+  namespace: keycloak
+spec:
+  action: ALLOW
+  rules:
+  - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all
+  namespace: minio
+spec:
+  action: ALLOW
+  rules:
+  - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all
+  namespace: monitoring
+spec:
+  action: ALLOW
+  rules:
+  - {}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-all
+  namespace: longhorn-system
+spec:
+  action: ALLOW
+  rules:
+  - {}
+EOF
+
+    log_info "mTLS exceptions, RBAC policies, and PeerAuthentication configured for non-sidecar services"
 }
 
 # Final configuration
