@@ -1470,39 +1470,8 @@ install_longhorn() {
     # Remove local-path as default if it exists
     kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' 2>/dev/null || true
 
-    # Create DestinationRule for Longhorn UI (no sidecar)
-    cat <<EOF | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: DestinationRule
-metadata:
-  name: longhorn-disable-mtls
-  namespace: istio-system
-spec:
-  host: longhorn-frontend.longhorn-system.svc.cluster.local
-  trafficPolicy:
-    tls:
-      mode: DISABLE
-EOF
-
-    # Create VirtualService for Longhorn UI on admin plane
-    cat <<EOF | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
-metadata:
-  name: longhorn-ui
-  namespace: istio-system
-spec:
-  hosts:
-    - "longhorn.${SIAB_DOMAIN}"
-  gateways:
-    - admin-gateway
-  http:
-    - route:
-        - destination:
-            host: longhorn-frontend.longhorn-system.svc.cluster.local
-            port:
-              number: 80
-EOF
+    # Note: Istio resources (DestinationRule and VirtualService) for Longhorn
+    # are created in create_istio_gateway() function after Istio is installed
 
     complete_step "Longhorn Block Storage"
     log_info "Longhorn block storage installed and configured as default StorageClass"
@@ -2887,6 +2856,29 @@ spec:
 EOF
 
     log_info "mTLS exceptions configured for non-sidecar services"
+
+    # Create VirtualService for Longhorn UI (installed before Istio, so created here)
+    log_info "Creating VirtualService for Longhorn UI..."
+    cat <<EOF | kubectl apply -f -
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: longhorn-ui
+  namespace: istio-system
+spec:
+  hosts:
+    - "longhorn.${SIAB_DOMAIN}"
+  gateways:
+    - admin-gateway
+  http:
+    - route:
+        - destination:
+            host: longhorn-frontend.longhorn-system.svc.cluster.local
+            port:
+              number: 80
+EOF
+
+    log_info "Longhorn UI VirtualService created"
 }
 
 # Final configuration
