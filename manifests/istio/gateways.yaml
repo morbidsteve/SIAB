@@ -1,0 +1,108 @@
+---
+# Admin Gateway - Administrative services with HTTPS redirect
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: admin-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-admin
+  servers:
+  # HTTPS server
+  - hosts:
+    - grafana.siab.local
+    - keycloak.siab.local
+    - k8s-dashboard.siab.local
+    - minio.siab.local
+    - longhorn.siab.local
+    - '*.admin.siab.local'
+    port:
+      name: https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: siab-gateway-cert
+      mode: SIMPLE
+  # HTTP server with redirect to HTTPS
+  - hosts:
+    - grafana.siab.local
+    - keycloak.siab.local
+    - k8s-dashboard.siab.local
+    - minio.siab.local
+    - longhorn.siab.local
+    - '*.admin.siab.local'
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+---
+# User Gateway - User-facing services with HTTPS redirect
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: user-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-user
+  servers:
+  # HTTPS server
+  - hosts:
+    - siab.local
+    - dashboard.siab.local
+    - catalog.siab.local
+    - '*.apps.siab.local'
+    port:
+      name: https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: siab-gateway-cert
+      mode: SIMPLE
+  # HTTP server with redirect to HTTPS
+  - hosts:
+    - siab.local
+    - dashboard.siab.local
+    - catalog.siab.local
+    - '*.apps.siab.local'
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+---
+# SIAB Gateway - Additional gateway for user ingress with HTTPS redirect
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: siab-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingress-user
+  servers:
+  # HTTPS server
+  - hosts:
+    - '*.siab.local'
+    - siab.local
+    port:
+      name: https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: siab-gateway-cert
+      mode: SIMPLE
+  # HTTP server with redirect to HTTPS
+  - hosts:
+    - '*.siab.local'
+    - siab.local
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
