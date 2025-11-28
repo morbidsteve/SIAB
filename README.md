@@ -286,6 +286,35 @@ kubectl logs -n istio-system -l istio=ingress-admin --tail=50
 
 👉 **[Full Troubleshooting Guide](./docs/TROUBLESHOOTING.md)**
 
+## 🗑️ Uninstalling SIAB
+
+To completely remove SIAB and return your system to its pre-installation state:
+
+```bash
+sudo ./uninstall.sh
+```
+
+**What gets removed:**
+- RKE2 Kubernetes cluster and all workloads
+- Istio service mesh
+- All deployed applications and data
+- Keycloak, MinIO, Longhorn, and all storage
+- Monitoring stack (Prometheus, Grafana)
+- Security components (Trivy, Gatekeeper)
+- Installed binaries (kubectl, helm, k9s, istioctl)
+- Firewall rules and configuration files
+
+**⚠️ Warning:** This action is destructive and cannot be undone. All data will be permanently deleted.
+
+**Optional backup:** The script will offer to back up configurations before removal.
+
+**Non-interactive mode:**
+```bash
+SIAB_UNINSTALL_CONFIRM=yes sudo ./uninstall.sh
+```
+
+After uninstallation, a system reboot is recommended to ensure all changes take effect.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:

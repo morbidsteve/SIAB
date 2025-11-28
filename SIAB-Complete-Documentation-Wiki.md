@@ -955,6 +955,129 @@ kubectl logs -n namespace pod-name --tail=100
 
 ---
 
+# Uninstalling SIAB
+
+## Complete Removal
+
+To completely remove SIAB and return your system to its pre-installation state, run:
+
+```bash
+sudo ./uninstall.sh
+```
+
+The uninstall script will:
+1. Show a comprehensive warning about what will be removed
+2. Request confirmation (you must type 'yes' to proceed)
+3. Optionally create a backup of configurations
+4. Gracefully stop all Kubernetes workloads
+5. Remove all SIAB components
+6. Clean up firewall rules
+7. Restore system to pre-SIAB state
+
+## What Gets Removed
+
+The uninstall script removes:
+
+- **RKE2 Kubernetes cluster** and all running workloads
+- **Istio service mesh** and all ingress gateways
+- **All deployed applications** and their data
+- **Keycloak** (Identity and Access Management)
+- **MinIO** (Object Storage) and all stored objects
+- **Longhorn** (Block Storage) and all volumes
+- **Prometheus & Grafana** and all monitoring data
+- **Trivy Operator** (Security scanning)
+- **OPA Gatekeeper** (Policy enforcement)
+- **All certificates and secrets**
+- **Firewall rules** added by SIAB
+- **Installed binaries** (kubectl, helm, k9s, istioctl, rke2)
+- **Configuration files** and logs
+- **CNI network interfaces** and iptables rules
+
+## Backup Before Uninstall
+
+The uninstall script will offer to create a backup of your configurations before removing anything. This includes:
+
+- Kubernetes configurations (kubeconfig)
+- RKE2 configuration files
+- SIAB-specific configurations
+- Exported Kubernetes resources (YAML manifests)
+
+**Important:** The backup does NOT include:
+- Persistent data from volumes (Longhorn, MinIO)
+- Database contents
+- Application-specific data
+
+If you need to preserve data, back it up manually before uninstalling.
+
+## Non-Interactive Uninstall
+
+For automation or scripts, use:
+
+```bash
+SIAB_UNINSTALL_CONFIRM=yes sudo ./uninstall.sh
+```
+
+This skips the interactive prompts and does not create a backup.
+
+## Post-Uninstall
+
+After uninstallation completes:
+
+1. **Reboot the system** to ensure all changes take effect:
+   ```bash
+   sudo reboot
+   ```
+
+2. **Verify cleanup** after reboot:
+   ```bash
+   # Check for lingering processes
+   ps aux | grep -E 'rke2|containerd|k3s'
+
+   # Check network interfaces are clean
+   ip link show
+
+   # Verify directories are removed
+   ls -la /opt/siab /etc/siab /var/lib/rancher
+   ```
+
+3. **Review backup** if created (located in `/tmp/siab-backup-YYYYMMDD-HHMMSS/`)
+
+## Troubleshooting Uninstall
+
+**Issue: Some processes still running after uninstall**
+- Reboot the system: `sudo reboot`
+- If processes persist, manually kill them: `sudo killall -9 containerd rke2`
+
+**Issue: Directories still exist**
+- Manually remove: `sudo rm -rf /opt/siab /etc/siab /var/lib/rancher`
+
+**Issue: Network interfaces still present**
+- Manually remove: `sudo ip link delete cni0; sudo ip link delete flannel.1`
+
+**Issue: Firewall rules still active**
+- Reset firewalld: `sudo firewall-cmd --reload`
+- Check rules: `sudo firewall-cmd --list-all`
+
+## Reinstalling After Uninstall
+
+To reinstall SIAB after uninstallation:
+
+1. Reboot the system first
+2. Verify system is clean (see Post-Uninstall verification above)
+3. Run the installer:
+   ```bash
+   sudo ./install.sh
+   ```
+
+If you created a backup, you can restore configurations after reinstallation:
+1. Reinstall SIAB with `install.sh`
+2. Apply backed-up Kubernetes resources:
+   ```bash
+   kubectl apply -f /tmp/siab-backup-YYYYMMDD-HHMMSS/k8s-resources/
+   ```
+
+---
+
 # FAQ
 
 ## General Questions
