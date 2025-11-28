@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIAB Application Deployer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            background: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+        }
+
+        .tab:hover:not(.active) {
+            background: #f8f9fa;
+            transform: translateY(-2px);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .file-upload {
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f8f9fa;
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background: #e3e7ff;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .app-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .app-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .app-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .app-card .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status.running {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .app-card .info {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .quick-deploy-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 SIAB Application Deployer</h1>
+            <p>Deploy applications from manifests, Helm charts, Dockerfiles, or docker-compose files with automatic integration into your SIAB cluster</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('quick')">Quick Deploy</button>
+            <button class="tab" onclick="showTab('manifest')">Kubernetes Manifest</button>
+            <button class="tab" onclick="showTab('helm')">Helm Chart</button>
+            <button class="tab" onclick="showTab('compose')">Docker Compose</button>
+            <button class="tab" onclick="showTab('dockerfile')">Dockerfile</button>
+            <button class="tab" onclick="showTab('deployed')">Deployed Apps</button>
+        </div>
+
+        <div id="alerts"></div>
+
+        <!-- Quick Deploy Tab -->
+        <div id="quick-tab" class="tab-content active">
+            <div class="card">
+                <h2>Quick Deploy</h2>
+                <p class="help-text">Deploy a containerized application with simple parameters. SIAB will automatically handle networking, storage, and security.</p>
+
+                <form id="quick-deploy-form" onsubmit="quickDeploy(event)">
+                    <div class="quick-deploy-grid">
+                        <div class="form-group">
+                            <label for="quick-name">Application Name *</label>
+                            <input type="text" id="quick-name" required placeholder="my-app">
+                            <div class="help-text">Lowercase letters, numbers, and hyphens only</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quick-image">Container Image *</label>
+                            <input type="text" id="quick-image" required placeholder="nginx:latest">
+                            <div class="help-text">Docker Hub or custom registry image</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quick-namespace">Namespace</label>
+                            <input type="text" id="quick-namespace" value="default" placeholder="default">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quick-port">Container Port</label>
+                            <input type="number" id="quick-port" value="80" placeholder="80">
+                            <div class="help-text">Port your app listens on</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quick-replicas">Replicas</label>
+                            <input type="number" id="quick-replicas" value="1" min="1" max="10">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="quick-storage">Storage Size (optional)</label>
+                            <input type="text" id="quick-storage" placeholder="10Gi">
+                            <div class="help-text">Creates persistent volume with Longhorn</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="quick-expose">
+                            <label for="quick-expose">Expose via HTTPS (creates Istio route)</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="hostname-group" style="display:none;">
+                        <label for="quick-hostname">Custom Hostname (optional)</label>
+                        <input type="text" id="quick-hostname" placeholder="myapp.siab.local">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="quick-env">Environment Variables (JSON format, optional)</label>
+                        <textarea id="quick-env" placeholder='{"KEY": "value", "ANOTHER_KEY": "another_value"}'></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="quick-deploy-btn">
+                        🚀 Deploy Application
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Kubernetes Manifest Tab -->
+        <div id="manifest-tab" class="tab-content">
+            <div class="card">
+                <h2>Deploy Kubernetes Manifest</h2>
+                <p class="help-text">Paste your Kubernetes YAML manifest or upload a file. SIAB will automatically inject Istio sidecars and configure networking.</p>
+
+                <form id="manifest-form" onsubmit="deployManifest(event)">
+                    <div class="form-group">
+                        <label for="manifest-namespace">Target Namespace</label>
+                        <input type="text" id="manifest-namespace" value="default" placeholder="default">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload Manifest File</label>
+                        <div class="file-upload" id="manifest-upload" onclick="document.getElementById('manifest-file').click()">
+                            <input type="file" id="manifest-file" accept=".yaml,.yml" onchange="loadManifestFile(event)">
+                            <p>📁 Click to select file or drag and drop</p>
+                            <p class="help-text">Supports .yaml and .yml files</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="manifest-content">Or Paste Manifest Content</label>
+                        <textarea id="manifest-content" placeholder="apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  ..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="manifest-deploy-btn">
+                        📦 Deploy Manifest
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Helm Chart Tab -->
+        <div id="helm-tab" class="tab-content">
+            <div class="card">
+                <h2>Deploy Helm Chart</h2>
+                <p class="help-text">Deploy applications from Helm charts with custom values.</p>
+
+                <form id="helm-form" onsubmit="deployHelm(event)">
+                    <div class="quick-deploy-grid">
+                        <div class="form-group">
+                            <label for="helm-chart">Chart Name or URL *</label>
+                            <input type="text" id="helm-chart" required placeholder="bitnami/nginx">
+                            <div class="help-text">From Helm repo or chart URL</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="helm-name">Release Name *</label>
+                            <input type="text" id="helm-name" required placeholder="my-release">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="helm-namespace">Namespace</label>
+                            <input type="text" id="helm-namespace" value="default" placeholder="default">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="helm-values">Custom Values (YAML format, optional)</label>
+                        <textarea id="helm-values" placeholder="replicaCount: 2
+service:
+  type: ClusterIP
+  port: 80"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="helm-deploy-btn">
+                        ⎈ Deploy Helm Chart
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Docker Compose Tab -->
+        <div id="compose-tab" class="tab-content">
+            <div class="card">
+                <h2>Deploy from Docker Compose</h2>
+                <p class="help-text">Convert and deploy your docker-compose.yml to Kubernetes. SIAB automatically translates compose syntax to Kubernetes resources.</p>
+
+                <form id="compose-form" onsubmit="deployCompose(event)">
+                    <div class="form-group">
+                        <label for="compose-namespace">Target Namespace</label>
+                        <input type="text" id="compose-namespace" value="default" placeholder="default">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload docker-compose.yml</label>
+                        <div class="file-upload" id="compose-upload" onclick="document.getElementById('compose-file').click()">
+                            <input type="file" id="compose-file" accept=".yml,.yaml" onchange="loadComposeFile(event)">
+                            <p>📁 Click to select file or drag and drop</p>
+                            <p class="help-text">Supports docker-compose.yml files</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="compose-content">Or Paste Compose Content</label>
+                        <textarea id="compose-content" placeholder="version: '3'
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - '80:80'"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="compose-deploy-btn">
+                        🐳 Deploy from Compose
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dockerfile Tab -->
+        <div id="dockerfile-tab" class="tab-content">
+            <div class="card">
+                <h2>Deploy from Dockerfile</h2>
+                <p class="help-text">Build a container image from Dockerfile and deploy it. Requires Docker or Buildah on the deployment server.</p>
+
+                <form id="dockerfile-form" onsubmit="deployDockerfile(event)">
+                    <div class="quick-deploy-grid">
+                        <div class="form-group">
+                            <label for="dockerfile-name">Application Name *</label>
+                            <input type="text" id="dockerfile-name" required placeholder="my-app">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dockerfile-namespace">Namespace</label>
+                            <input type="text" id="dockerfile-namespace" value="default" placeholder="default">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dockerfile-port">Container Port</label>
+                            <input type="number" id="dockerfile-port" value="8080" placeholder="8080">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Upload Dockerfile</label>
+                        <div class="file-upload" id="dockerfile-upload" onclick="document.getElementById('dockerfile-file').click()">
+                            <input type="file" id="dockerfile-file" onchange="loadDockerfile(event)">
+                            <p>📁 Click to select Dockerfile or drag and drop</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="dockerfile-content">Or Paste Dockerfile Content</label>
+                        <textarea id="dockerfile-content" placeholder="FROM node:18-alpine
+WORKDIR /app
+COPY . .
+RUN npm install
+CMD ['npm', 'start']"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn" id="dockerfile-deploy-btn">
+                        🔨 Build and Deploy
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Deployed Apps Tab -->
+        <div id="deployed-tab" class="tab-content">
+            <div class="card">
+                <h2>Deployed Applications</h2>
+                <p class="help-text">Manage your deployed applications</p>
+
+                <div class="form-group">
+                    <label for="filter-namespace">Filter by Namespace</label>
+                    <select id="filter-namespace" onchange="loadDeployedApps()">
+                        <option value="default">default</option>
+                        <option value="all">All Namespaces</option>
+                    </select>
+                </div>
+
+                <div id="apps-list" class="app-grid">
+                    <p>Loading applications...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin.replace(':8080', ':5000');
+
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+
+            if (tabName === 'deployed') {
+                loadDeployedApps();
+            }
+        }
+
+        // Alerts
+        function showAlert(message, type = 'info') {
+            const alertsDiv = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alertsDiv.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Toggle hostname field
+        document.getElementById('quick-expose').addEventListener('change', (e) => {
+            document.getElementById('hostname-group').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // File uploads
+        function loadManifestFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('manifest-content').value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function loadComposeFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('compose-content').value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function loadDockerfile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('dockerfile-content').value = e.target.result;
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Drag and drop
+        ['manifest-upload', 'compose-upload', 'dockerfile-upload'].forEach(id => {
+            const elem = document.getElementById(id);
+            elem.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                elem.classList.add('dragover');
+            });
+            elem.addEventListener('dragleave', () => {
+                elem.classList.remove('dragover');
+            });
+            elem.addEventListener('drop', (e) => {
+                e.preventDefault();
+                elem.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        if (id.includes('manifest')) {
+                            document.getElementById('manifest-content').value = e.target.result;
+                        } else if (id.includes('compose')) {
+                            document.getElementById('compose-content').value = e.target.result;
+                        } else if (id.includes('dockerfile')) {
+                            document.getElementById('dockerfile-content').value = e.target.result;
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+        });
+
+        // Quick Deploy
+        async function quickDeploy(event) {
+            event.preventDefault();
+            const btn = document.getElementById('quick-deploy-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Deploying...';
+
+            try {
+                const env = document.getElementById('quick-env').value;
+                const envObj = env ? JSON.parse(env) : {};
+
+                const response = await fetch(`${API_BASE}/api/deploy/quick`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: document.getElementById('quick-name').value,
+                        image: document.getElementById('quick-image').value,
+                        namespace: document.getElementById('quick-namespace').value,
+                        port: parseInt(document.getElementById('quick-port').value),
+                        replicas: parseInt(document.getElementById('quick-replicas').value),
+                        storage_size: document.getElementById('quick-storage').value || null,
+                        expose: document.getElementById('quick-expose').checked,
+                        hostname: document.getElementById('quick-hostname').value || null,
+                        env: envObj
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message + (data.access_url ? ` - Access at: ${data.access_url}` : ''), 'success');
+                    event.target.reset();
+                } else {
+                    showAlert('Deployment failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Deploy Application';
+            }
+        }
+
+        // Deploy Manifest
+        async function deployManifest(event) {
+            event.preventDefault();
+            const btn = document.getElementById('manifest-deploy-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Deploying...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/deploy/manifest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        manifest: document.getElementById('manifest-content').value,
+                        namespace: document.getElementById('manifest-namespace').value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    event.target.reset();
+                } else {
+                    showAlert('Deployment failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '📦 Deploy Manifest';
+            }
+        }
+
+        // Deploy Helm
+        async function deployHelm(event) {
+            event.preventDefault();
+            const btn = document.getElementById('helm-deploy-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Deploying...';
+
+            try {
+                const values = document.getElementById('helm-values').value;
+                const valuesObj = values ? jsyaml.load(values) : {};
+
+                const response = await fetch(`${API_BASE}/api/deploy/helm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chart: document.getElementById('helm-chart').value,
+                        name: document.getElementById('helm-name').value,
+                        namespace: document.getElementById('helm-namespace').value,
+                        values: valuesObj
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    event.target.reset();
+                } else {
+                    showAlert('Deployment failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '⎈ Deploy Helm Chart';
+            }
+        }
+
+        // Deploy Compose
+        async function deployCompose(event) {
+            event.preventDefault();
+            const btn = document.getElementById('compose-deploy-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Deploying...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/deploy/compose`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        compose: document.getElementById('compose-content').value,
+                        namespace: document.getElementById('compose-namespace').value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    event.target.reset();
+                } else {
+                    showAlert('Deployment failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🐳 Deploy from Compose';
+            }
+        }
+
+        // Deploy Dockerfile
+        async function deployDockerfile(event) {
+            event.preventDefault();
+            const btn = document.getElementById('dockerfile-deploy-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Building and Deploying...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/deploy/dockerfile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dockerfile: document.getElementById('dockerfile-content').value,
+                        name: document.getElementById('dockerfile-name').value,
+                        namespace: document.getElementById('dockerfile-namespace').value,
+                        port: parseInt(document.getElementById('dockerfile-port').value)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    event.target.reset();
+                } else {
+                    showAlert('Deployment failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🔨 Build and Deploy';
+            }
+        }
+
+        // Load deployed apps
+        async function loadDeployedApps() {
+            const namespace = document.getElementById('filter-namespace').value;
+            const appsDiv = document.getElementById('apps-list');
+            appsDiv.innerHTML = '<p>Loading applications...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/applications?namespace=${namespace}`);
+                const data = await response.json();
+
+                if (data.applications && data.applications.length > 0) {
+                    appsDiv.innerHTML = '';
+                    data.applications.forEach(app => {
+                        const card = document.createElement('div');
+                        card.className = 'app-card';
+                        card.innerHTML = `
+                            <h3>${app.name}</h3>
+                            <div class="status ${app.ready_replicas === app.replicas ? 'running' : 'pending'}">
+                                ${app.ready_replicas}/${app.replicas} Ready
+                            </div>
+                            <div class="info">
+                                <strong>Namespace:</strong> ${app.namespace}<br>
+                                <strong>Created:</strong> ${new Date(app.created).toLocaleString()}
+                            </div>
+                            <button class="btn btn-danger" onclick="deleteApp('${app.name}', '${app.namespace}')">
+                                🗑️ Delete
+                            </button>
+                        `;
+                        appsDiv.appendChild(card);
+                    });
+                } else {
+                    appsDiv.innerHTML = '<p>No applications deployed</p>';
+                }
+            } catch (error) {
+                appsDiv.innerHTML = `<p class="alert alert-error">Error loading applications: ${error.message}</p>`;
+            }
+        }
+
+        // Delete app
+        async function deleteApp(name, namespace) {
+            if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/applications/${name}?namespace=${namespace}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    loadDeployedApps();
+                } else {
+                    showAlert('Delete failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Load deployed apps on page load if on that tab
+        if (document.getElementById('deployed-tab').classList.contains('active')) {
+            loadDeployedApps();
+        }
+    </script>
+</body>
+</html>

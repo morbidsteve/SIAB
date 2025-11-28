@@ -1,0 +1,433 @@
+---
+# SIAB Application Deployer
+# Complete deployment manifest for the application deployment system
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: siab-deployer
+  labels:
+    istio-injection: enabled
+
+---
+# ConfigMap for backend code
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployer-backend-code
+  namespace: siab-deployer
+data:
+  app-deployer-api.py: |
+    # Content will be populated from backend/app-deployer-api.py
+    # Use: kubectl create configmap deployer-backend-code --from-file=app-deployer-api.py -n siab-deployer
+  requirements.txt: |
+    Flask==3.0.0
+    flask-cors==4.0.0
+    PyYAML==6.0.1
+    requests==2.31.0
+    kubernetes==28.1.0
+
+---
+# ConfigMap for frontend
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployer-frontend-html
+  namespace: siab-deployer
+data:
+  index.html: |
+    # Content will be populated from frontend/index.html
+    # Use: kubectl create configmap deployer-frontend-html --from-file=index.html -n siab-deployer
+
+---
+# ServiceAccount with cluster permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-deployer
+  namespace: siab-deployer
+
+---
+# ClusterRole for deployment operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: app-deployer
+rules:
+  # Namespace management
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "create", "update", "patch"]
+
+  # Deployment and workload management
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # Service management
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # ConfigMap and Secret management
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # PVC and PV management
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "persistentvolumes"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # Istio resources
+  - apiGroups: ["networking.istio.io"]
+    resources: ["virtualservices", "destinationrules", "gateways", "serviceentries"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+  # Pod and event access (for status checking)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+
+  # Ingress management
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: app-deployer
+subjects:
+  - kind: ServiceAccount
+    name: app-deployer
+    namespace: siab-deployer
+roleRef:
+  kind: ClusterRole
+  name: app-deployer
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployer-backend
+  namespace: siab-deployer
+  labels:
+    app: app-deployer-backend
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-deployer-backend
+  template:
+    metadata:
+      labels:
+        app: app-deployer-backend
+        component: api
+    spec:
+      serviceAccountName: app-deployer
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: python:3.11-slim
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              apt-get update && apt-get install -y --no-install-recommends kubectl curl && \
+              pip install --no-cache-dir -r /app/requirements.txt && \
+              python /app/app-deployer-api.py
+          ports:
+            - containerPort: 5000
+              name: http
+              protocol: TCP
+          env:
+            - name: FLASK_ENV
+              value: "production"
+            - name: SIAB_DOMAIN
+              value: "siab.local"
+            - name: KEYCLOAK_ENABLED
+              value: "true"
+            - name: ISTIO_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+            - name: kubeconfig
+              mountPath: /root/.kube
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: app-code
+          configMap:
+            name: deployer-backend-code
+        - name: kubeconfig
+          emptyDir: {}
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-deployer-backend
+  namespace: siab-deployer
+  labels:
+    app: app-deployer-backend
+spec:
+  selector:
+    app: app-deployer-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+      name: http
+      protocol: TCP
+  type: ClusterIP
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployer-frontend
+  namespace: siab-deployer
+  labels:
+    app: app-deployer-frontend
+    component: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app-deployer-frontend
+  template:
+    metadata:
+      labels:
+        app: app-deployer-frontend
+        component: web
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101  # nginx user
+        fsGroup: 101
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: html
+          configMap:
+            name: deployer-frontend-html
+        - name: nginx-config
+          configMap:
+            name: deployer-nginx-config
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-deployer-frontend
+  namespace: siab-deployer
+  labels:
+    app: app-deployer-frontend
+spec:
+  selector:
+    app: app-deployer-frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+      protocol: TCP
+  type: ClusterIP
+
+---
+# Nginx ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deployer-nginx-config
+  namespace: siab-deployer
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Main app
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # API proxy
+        location /api/ {
+            proxy_pass http://app-deployer-backend:5000/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # WebSocket support (for future real-time updates)
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Health check
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+
+---
+# Istio VirtualService
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: app-deployer
+  namespace: istio-system
+spec:
+  hosts:
+    - "deployer.siab.local"
+  gateways:
+    - siab-gateway
+  http:
+    - route:
+        - destination:
+            host: app-deployer-frontend.siab-deployer.svc.cluster.local
+            port:
+              number: 80
+
+---
+# Network Policy (optional - for added security)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-deployer
+  namespace: siab-deployer
+spec:
+  podSelector:
+    matchLabels:
+      app: app-deployer-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from Istio gateway
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: istio-system
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Allow to backend
+    - to:
+        - podSelector:
+            matchLabels:
+              app: app-deployer-backend
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# Backend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-deployer-backend
+  namespace: siab-deployer
+spec:
+  podSelector:
+    matchLabels:
+      app: app-deployer-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: app-deployer-frontend
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # Allow to Kubernetes API
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53

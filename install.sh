@@ -2290,7 +2290,7 @@ spec:
   host: kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local
   trafficPolicy:
     tls:
-      mode: DISABLE
+      mode: SIMPLE
 EOF
 
     # Create Istio VirtualService for Kubernetes Dashboard
