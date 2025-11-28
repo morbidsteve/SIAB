@@ -47,3 +47,4 @@ venv/
 # Helm
 *.tgz
 charts/*.tgz
+up_errors.txt

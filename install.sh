@@ -632,31 +632,57 @@ install_dependencies() {
 
 # Configure firewall
 configure_firewall() {
-    log_step "Configuring firewall..."
+    log_step "Configuring firewall for RKE2, Canal, and Istio..."
 
     if [[ "${FIREWALL_CMD}" == "firewalld" ]]; then
-        # Install firewalld if not present
-        dnf install -y firewalld
-        systemctl enable --now firewalld
+        # Use comprehensive firewalld configuration script
+        if [[ -f "${SIAB_REPO_DIR}/scripts/configure-firewalld.sh" ]]; then
+            log_info "Running comprehensive firewalld configuration..."
+            bash "${SIAB_REPO_DIR}/scripts/configure-firewalld.sh"
+        else
+            # Fallback to basic configuration if script not found
+            log_warn "Firewalld script not found, using basic configuration..."
 
-        # RKE2 ports
-        firewall-cmd --permanent --add-port=6443/tcp   # Kubernetes API
-        firewall-cmd --permanent --add-port=9345/tcp   # RKE2 supervisor API
-        firewall-cmd --permanent --add-port=10250/tcp  # Kubelet metrics
-        firewall-cmd --permanent --add-port=2379/tcp   # etcd client
-        firewall-cmd --permanent --add-port=2380/tcp   # etcd peer
-        firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services
+            # Install firewalld if not present
+            dnf install -y firewalld
+            systemctl enable --now firewalld
 
-        # Istio ports
-        firewall-cmd --permanent --add-port=15021/tcp  # Istio health check
-        firewall-cmd --permanent --add-port=443/tcp    # HTTPS ingress
-        firewall-cmd --permanent --add-port=80/tcp     # HTTP ingress (redirect to HTTPS)
+            # Add CNI interfaces to trusted zone
+            firewall-cmd --permanent --zone=trusted --add-interface=cni0 2>/dev/null || true
+            firewall-cmd --permanent --zone=trusted --add-interface=flannel.1 2>/dev/null || true
+            firewall-cmd --permanent --zone=trusted --add-interface=tunl0 2>/dev/null || true
 
-        # CNI ports
-        firewall-cmd --permanent --add-port=8472/udp   # VXLAN
-        firewall-cmd --permanent --add-port=4789/udp   # VXLAN
+            # Add pod and service CIDRs to trusted zone
+            firewall-cmd --permanent --zone=trusted --add-source=10.42.0.0/16  # Pod CIDR
+            firewall-cmd --permanent --zone=trusted --add-source=10.43.0.0/16  # Service CIDR
 
-        firewall-cmd --reload
+            # RKE2 ports
+            firewall-cmd --permanent --add-port=6443/tcp   # Kubernetes API
+            firewall-cmd --permanent --add-port=9345/tcp   # RKE2 supervisor API
+            firewall-cmd --permanent --add-port=10250/tcp  # Kubelet metrics
+            firewall-cmd --permanent --add-port=2379-2380/tcp   # etcd
+            firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services
+
+            # Canal (Calico + Flannel) ports
+            firewall-cmd --permanent --add-port=8472/udp   # Flannel VXLAN
+            firewall-cmd --permanent --add-port=4789/udp   # Flannel VXLAN (alt)
+            firewall-cmd --permanent --add-port=51820-51821/udp  # Flannel Wireguard
+            firewall-cmd --permanent --add-port=179/tcp    # Calico BGP
+            firewall-cmd --permanent --add-port=5473/tcp   # Calico Typha
+
+            # Istio ports
+            firewall-cmd --permanent --add-port=80/tcp     # HTTP ingress (redirects to HTTPS)
+            firewall-cmd --permanent --add-port=443/tcp    # HTTPS ingress
+            firewall-cmd --permanent --add-port=15010-15017/tcp  # Istio control plane
+            firewall-cmd --permanent --add-port=15021/tcp  # Istio health checks
+            firewall-cmd --permanent --add-port=15090/tcp  # Istio metrics
+
+            # Enable masquerading
+            firewall-cmd --permanent --zone=public --add-masquerade
+            firewall-cmd --permanent --zone=trusted --add-masquerade
+
+            firewall-cmd --reload
+        fi
 
     elif [[ "${FIREWALL_CMD}" == "ufw" ]]; then
         # Install ufw if not present
@@ -676,20 +702,26 @@ configure_firewall() {
         ufw allow 2380/tcp    # etcd peer
         ufw allow 30000:32767/tcp  # NodePort Services
 
-        # Istio ports
-        ufw allow 15021/tcp   # Istio health check
-        ufw allow 443/tcp     # HTTPS ingress
-        ufw allow 80/tcp      # HTTP ingress (redirect to HTTPS)
+        # Canal (Calico + Flannel) ports
+        ufw allow 8472/udp    # Flannel VXLAN
+        ufw allow 4789/udp    # Flannel VXLAN (alt)
+        ufw allow 51820:51821/udp  # Flannel Wireguard
+        ufw allow 179/tcp     # Calico BGP
+        ufw allow 5473/tcp    # Calico Typha
 
-        # CNI ports
-        ufw allow 8472/udp    # VXLAN
-        ufw allow 4789/udp    # VXLAN
+        # Istio ports
+        ufw allow 80/tcp      # HTTP ingress (redirects to HTTPS)
+        ufw allow 443/tcp     # HTTPS ingress
+        ufw allow 15010:15017/tcp  # Istio control plane
+        ufw allow 15021/tcp   # Istio health checks
+        ufw allow 15090/tcp   # Istio metrics
 
         # Reload ufw
         ufw reload
     fi
 
-    log_info "Firewall configured"
+    log_info "Firewall configured successfully"
+    log_info "Note: CNI interfaces will be added to trusted zone when they are created"
 }
 
 # Configure security module (SELinux or AppArmor)
@@ -2488,7 +2520,7 @@ create_istio_gateway() {
         return 0
     fi
 
-    log_step "Creating Istio Gateways (Admin and User planes)..."
+    log_step "Creating Istio Gateways with HTTPS-only access..."
 
     # Create certificate for gateways
     cat <<EOF | kubectl apply -f -
@@ -2510,8 +2542,16 @@ spec:
     - "admin.${SIAB_DOMAIN}"
 EOF
 
-    # ADMIN Gateway - for administrative interfaces (Grafana, Keycloak, K8s Dashboard, MinIO)
-    cat <<EOF | kubectl apply -f -
+    # Use manifest files if available, otherwise create inline
+    if [[ -f "${SIAB_REPO_DIR}/manifests/istio/gateways.yaml" ]]; then
+        log_info "Applying gateway manifests with HTTPS redirects..."
+        # Replace SIAB_DOMAIN placeholder in manifests
+        sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/istio/gateways.yaml" | kubectl apply -f -
+    else
+        log_info "Creating gateways inline with HTTPS redirects..."
+
+        # ADMIN Gateway - for administrative interfaces (Grafana, Keycloak, K8s Dashboard, MinIO)
+        cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
@@ -2539,6 +2579,8 @@ spec:
         number: 80
         name: http
         protocol: HTTP
+      tls:
+        httpsRedirect: true
       hosts:
         - "grafana.${SIAB_DOMAIN}"
         - "keycloak.${SIAB_DOMAIN}"
@@ -2548,8 +2590,8 @@ spec:
         - "*.admin.${SIAB_DOMAIN}"
 EOF
 
-    # USER Gateway - for user applications and catalog
-    cat <<EOF | kubectl apply -f -
+        # USER Gateway - for user applications and catalog
+        cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
@@ -2575,6 +2617,8 @@ spec:
         number: 80
         name: http
         protocol: HTTP
+      tls:
+        httpsRedirect: true
       hosts:
         - "${SIAB_DOMAIN}"
         - "dashboard.${SIAB_DOMAIN}"
@@ -2582,8 +2626,8 @@ spec:
         - "*.apps.${SIAB_DOMAIN}"
 EOF
 
-    # Legacy gateway for backward compatibility (routes to user gateway by default)
-    cat <<EOF | kubectl apply -f -
+        # Legacy gateway for backward compatibility (routes to user gateway by default)
+        cat <<EOF | kubectl apply -f -
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
@@ -2607,10 +2651,47 @@ spec:
         number: 80
         name: http
         protocol: HTTP
+      tls:
+        httpsRedirect: true
       hosts:
         - "*.${SIAB_DOMAIN}"
         - "${SIAB_DOMAIN}"
 EOF
+    fi
+
+    # Apply PeerAuthentication policies for ingress gateways
+    log_info "Configuring mTLS policies for ingress gateways..."
+    if [[ -f "${SIAB_REPO_DIR}/manifests/istio/peer-authentication.yaml" ]]; then
+        kubectl apply -f "${SIAB_REPO_DIR}/manifests/istio/peer-authentication.yaml"
+    else
+        # Create inline if manifest not found
+        cat <<EOF | kubectl apply -f -
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: ingress-admin-mtls
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  mtls:
+    mode: PERMISSIVE
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: ingress-user-mtls
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  mtls:
+    mode: PERMISSIVE
+EOF
+    fi
 
     # Create RequestAuthentication for JWT validation from Keycloak (on admin gateway)
     cat <<EOF | kubectl apply -f -
