@@ -712,12 +712,12 @@
 
             <div class="nav-section">
                 <div class="nav-section-title">Navigation</div>
-                <div class="nav-item active" onclick="showPage('apps')">
+                <div class="nav-item active" onclick="showPage('apps', this)">
                     <span class="nav-item-icon">&#128230;</span>
                     <span>My Applications</span>
                     <span class="nav-item-badge" id="appCount">0</span>
                 </div>
-                <div class="nav-item" onclick="showPage('deploy')">
+                <div class="nav-item" onclick="showPage('deploy', this)">
                     <span class="nav-item-icon">&#128640;</span>
                     <span>Deploy New</span>
                 </div>
@@ -928,12 +928,24 @@
         });
 
         // Navigation
-        function showPage(pageId) {
+        function showPage(pageId, clickedElement) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
             document.getElementById('page-' + pageId).classList.add('active');
-            event.currentTarget?.classList.add('active');
+
+            // Highlight the correct nav item
+            if (clickedElement) {
+                clickedElement.classList.add('active');
+            } else {
+                // Find the nav item for this page and highlight it
+                const navItems = document.querySelectorAll('.nav-item');
+                navItems.forEach(item => {
+                    if (item.textContent.toLowerCase().includes(pageId === 'apps' ? 'application' : pageId)) {
+                        item.classList.add('active');
+                    }
+                });
+            }
 
             if (pageId === 'apps') {
                 loadApplications();
