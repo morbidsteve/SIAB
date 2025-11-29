@@ -131,10 +131,16 @@ spec:
         component: api
     spec:
       serviceAccountName: app-deployer
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+      initContainers:
+        - name: kubectl-installer
+          image: bitnami/kubectl:latest
+          command:
+            - "/bin/bash"
+            - "-c"
+            - "cp /opt/bitnami/kubectl/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl"
+          volumeMounts:
+            - name: shared-bin
+              mountPath: /shared
       containers:
         - name: api
           image: python:3.11-slim
@@ -142,8 +148,8 @@ spec:
             - "/bin/sh"
             - "-c"
             - |
-              apt-get update && apt-get install -y --no-install-recommends kubectl curl && \
-              pip install --no-cache-dir -r /app/requirements.txt && \
+              cp /shared/kubectl /usr/local/bin/kubectl && \
+              pip install --no-cache-dir Flask==3.0.0 flask-cors==4.0.0 PyYAML==6.0.1 requests==2.31.0 && \
               python /app/app-deployer-api.py
           ports:
             - containerPort: 5000
@@ -161,9 +167,8 @@ spec:
           volumeMounts:
             - name: app-code
               mountPath: /app
-            - name: kubeconfig
-              mountPath: /root/.kube
-              readOnly: true
+            - name: shared-bin
+              mountPath: /shared
           resources:
             requests:
               cpu: 200m
@@ -175,19 +180,19 @@ spec:
             httpGet:
               path: /health
               port: 5000
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
               port: 5000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 5
       volumes:
         - name: app-code
           configMap:
             name: deployer-backend-code
-        - name: kubeconfig
+        - name: shared-bin
           emptyDir: {}
 
 ---
@@ -230,13 +235,9 @@ spec:
         app: app-deployer-frontend
         component: web
     spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 101  # nginx user
-        fsGroup: 101
       containers:
         - name: nginx
-          image: nginx:1.25-alpine
+          image: nginxinc/nginx-unprivileged:1.25-alpine
           ports:
             - containerPort: 8080
               name: http

@@ -39,8 +39,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-APPS_DIR = os.getenv('APPS_DIR', '/app/apps')
-DEPLOYMENTS_DIR = os.getenv('DEPLOYMENTS_DIR', '/app/deployments')
+APPS_DIR = os.getenv('APPS_DIR', '/tmp/apps')
+DEPLOYMENTS_DIR = os.getenv('DEPLOYMENTS_DIR', '/tmp/deployments')
 SIAB_DOMAIN = os.getenv('SIAB_DOMAIN', 'siab.local')
 KEYCLOAK_ENABLED = os.getenv('KEYCLOAK_ENABLED', 'true').lower() == 'true'
 ISTIO_ENABLED = os.getenv('ISTIO_ENABLED', 'true').lower() == 'true'
