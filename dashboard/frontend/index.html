@@ -6,1189 +6,647 @@
     <title>SIAB Dashboard</title>
     <style>
         :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
-            --secondary: #6366f1;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
+            --primary: #667eea;
+            --primary-dark: #5a67d8;
+            --secondary: #764ba2;
+            --success: #48bb78;
+            --warning: #ed8936;
+            --danger: #f56565;
             --gray-50: #f9fafb;
             --gray-100: #f3f4f6;
             --gray-200: #e5e7eb;
             --gray-300: #d1d5db;
-            --gray-400: #9ca3af;
             --gray-500: #6b7280;
-            --gray-600: #4b5563;
             --gray-700: #374151;
-            --gray-800: #1f2937;
             --gray-900: #111827;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--gray-900) 0%, var(--gray-800) 100%);
-            min-height: 100vh;
-            color: var(--gray-100);
-        }
-
-        /* Header */
-        .header {
-            background: rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .logo-icon {
-            width: 40px;
-            height: 40px;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            border-radius: 10px;
+            min-height: 100vh;
+        }
+
+        /* Login Screen */
+        .login-container {
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.25rem;
+            padding: 20px;
         }
 
-        .logo-text {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .login-box {
+            background: white;
+            border-radius: 24px;
+            padding: 48px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
 
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+        .login-logo {
+            font-size: 64px;
+            margin-bottom: 16px;
         }
 
-        .user-name {
-            font-size: 0.9rem;
-            color: var(--gray-300);
+        .login-title {
+            font-size: 28px;
+            color: var(--gray-900);
+            margin-bottom: 8px;
         }
 
-        .user-role {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.75rem;
-            background: rgba(59, 130, 246, 0.2);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            border-radius: 20px;
-            color: var(--primary);
+        .login-subtitle {
+            color: var(--gray-500);
+            margin-bottom: 32px;
         }
 
-        .logout-btn {
-            padding: 0.5rem 1rem;
-            background: transparent;
-            border: 1px solid var(--gray-600);
-            color: var(--gray-300);
-            border-radius: 6px;
+        .btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+            text-decoration: none;
+            width: 100%;
         }
 
-        .logout-btn:hover {
-            background: var(--gray-700);
-            border-color: var(--gray-500);
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
         }
 
-        /* Main Content */
-        .main {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-700);
         }
 
-        .welcome {
-            margin-bottom: 2rem;
+        .btn-sm {
+            padding: 10px 18px;
+            font-size: 14px;
         }
 
-        .welcome h1 {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
+        /* Dashboard */
+        .dashboard-container {
+            display: none;
+            min-height: 100vh;
         }
 
-        .welcome p {
-            color: var(--gray-400);
+        .dashboard-container.active {
+            display: block;
         }
 
-        /* Sections */
-        .section {
-            margin-bottom: 3rem;
-        }
-
-        .section-header {
+        .header {
+            background: white;
+            padding: 20px 40px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-brand h1 {
+            font-size: 24px;
+            color: var(--primary);
+        }
+
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .user-info {
+            text-align: right;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .user-avatar {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .main-content {
+            padding: 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .welcome-banner {
+            background: white;
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .welcome-banner h2 {
+            font-size: 28px;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .welcome-banner p {
+            color: var(--gray-500);
         }
 
         .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
+            font-size: 18px;
+            color: var(--gray-900);
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 10px;
         }
 
-        .section-title .icon {
-            font-size: 1.5rem;
-        }
-
-        /* Grid */
-        .tiles-grid {
+        /* App Grid */
+        .app-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
+            gap: 24px;
+            margin-bottom: 40px;
         }
 
-        /* Tile */
-        .tile {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .app-tile {
+            background: white;
             border-radius: 16px;
-            padding: 1.5rem;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
             transition: all 0.3s;
-            cursor: pointer;
+            text-decoration: none;
+            display: block;
             position: relative;
             overflow: hidden;
         }
 
-        .tile:hover {
-            transform: translateY(-4px);
-            border-color: rgba(59, 130, 246, 0.5);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        .app-tile:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
         }
 
-        .tile-header {
+        .app-tile-header {
             display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            margin-bottom: 1rem;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
         }
 
-        .tile-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+        .app-tile-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
+            font-size: 28px;
+            flex-shrink: 0;
         }
 
-        .tile-icon.admin {
-            background: linear-gradient(135deg, #dc2626 0%, #f97316 100%);
+        .app-tile-icon.system { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .app-tile-icon.monitoring { background: linear-gradient(135deg, #f6ad55, #ed8936); }
+        .app-tile-icon.storage { background: linear-gradient(135deg, #4fd1c5, #38b2ac); }
+        .app-tile-icon.security { background: linear-gradient(135deg, #fc8181, #f56565); }
+        .app-tile-icon.app { background: linear-gradient(135deg, #68d391, #48bb78); }
+
+        .app-tile-info h3 {
+            font-size: 18px;
+            color: var(--gray-900);
+            margin-bottom: 4px;
         }
 
-        .tile-icon.system {
-            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-        }
-
-        .tile-icon.app {
-            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-        }
-
-        .tile-icon.tool {
-            background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
-        }
-
-        .tile-status {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-            font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 20px;
-        }
-
-        .tile-status.healthy {
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
-        }
-
-        .tile-status.warning {
-            background: rgba(245, 158, 11, 0.2);
-            color: var(--warning);
-        }
-
-        .tile-status.error {
-            background: rgba(239, 68, 68, 0.2);
-            color: var(--danger);
-        }
-
-        .tile-status .dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: currentColor;
-        }
-
-        .tile-name {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .tile-description {
-            font-size: 0.85rem;
-            color: var(--gray-400);
-            line-height: 1.5;
-            margin-bottom: 1rem;
-        }
-
-        .tile-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 1rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .tile-url {
-            font-size: 0.75rem;
+        .app-tile-info p {
+            font-size: 13px;
             color: var(--gray-500);
-            font-family: monospace;
         }
 
-        .tile-badge {
-            font-size: 0.65rem;
-            padding: 0.2rem 0.5rem;
-            background: rgba(99, 102, 241, 0.2);
-            border-radius: 4px;
-            color: var(--secondary);
+        .app-tile-status {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .app-tile-status.pending {
+            background: var(--warning);
+            box-shadow: 0 0 8px var(--warning);
+        }
+
+        .app-tile-url {
+            display: block;
+            margin-top: 12px;
+            padding: 10px 14px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* Admin Only Badge */
+        .admin-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        /* Admin Actions */
-        .admin-actions {
-            display: none;
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            gap: 0.25rem;
-        }
-
-        .tile:hover .admin-actions {
-            display: flex;
-        }
-
-        .admin-btn {
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
-
-        .admin-btn.edit {
-            background: rgba(59, 130, 246, 0.3);
-            color: var(--primary);
-        }
-
-        .admin-btn.delete {
-            background: rgba(239, 68, 68, 0.3);
-            color: var(--danger);
-        }
-
-        .admin-btn:hover {
-            transform: scale(1.1);
-        }
-
-        /* Add Tile */
-        .tile.add-tile {
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            background: transparent;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 200px;
-            color: var(--gray-500);
-        }
-
-        .tile.add-tile:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-
-        .add-icon {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        /* Quick Stats */
-        .quick-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 1.25rem;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: var(--gray-400);
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-
-        .stat-value.success { color: var(--success); }
-        .stat-value.warning { color: var(--warning); }
-        .stat-value.danger { color: var(--danger); }
-
-        /* Modal */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: var(--gray-800);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            width: 90%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .modal-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--gray-400);
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-
-        .modal-body {
-            padding: 1.5rem;
-        }
-
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.85rem;
-            color: var(--gray-300);
-            margin-bottom: 0.5rem;
-        }
-
-        .form-input, .form-select {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--gray-700);
-            border: 1px solid var(--gray-600);
-            border-radius: 8px;
-            color: var(--gray-100);
-            font-size: 0.95rem;
-        }
-
-        .form-input:focus, .form-select:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .form-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-
-        .form-checkbox input {
-            width: 18px;
-            height: 18px;
-        }
-
-        .modal-footer {
-            padding: 1.5rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
-        }
-
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--primary-dark);
-        }
-
-        .btn-secondary {
-            background: var(--gray-600);
-            color: var(--gray-100);
-        }
-
-        .btn-secondary:hover {
-            background: var(--gray-500);
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
         /* Loading */
-        .loading {
-            text-align: center;
-            padding: 4rem;
-            color: var(--gray-400);
-        }
-
-        .spinner {
+        .loading-spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid var(--gray-700);
+            border: 3px solid var(--gray-200);
             border-top-color: var(--primary);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        /* Login screen */
-        .login-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 2rem;
-        }
-
-        .login-box {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px;
-            padding: 3rem;
+        .loading-text {
             text-align: center;
-            max-width: 400px;
-            width: 100%;
+            color: var(--gray-500);
+            margin-top: 16px;
         }
 
-        .login-logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5rem;
-            margin: 0 auto 1.5rem;
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
 
-        .login-title {
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
+        .empty-state-icon {
+            font-size: 48px;
+            opacity: 0.5;
+            margin-bottom: 16px;
         }
 
-        .login-subtitle {
-            color: var(--gray-400);
-            margin-bottom: 2rem;
+        /* Hide elements based on role */
+        .admin-only {
+            display: none;
         }
 
-        .login-btn {
-            width: 100%;
-            padding: 1rem;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            border: none;
-            border-radius: 12px;
-            color: white;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
+        body.is-admin .admin-only {
+            display: block;
         }
 
-        .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
-        }
-
-        /* Hidden class */
-        .hidden {
-            display: none !important;
+        @media (max-width: 768px) {
+            .header { padding: 16px 20px; flex-direction: column; gap: 16px; }
+            .main-content { padding: 20px; }
+            .app-grid { grid-template-columns: 1fr; }
+            .welcome-banner { padding: 24px; }
         }
     </style>
 </head>
 <body>
     <!-- Login Screen -->
-    <div id="loginScreen" class="login-container">
+    <div class="login-container" id="loginContainer">
         <div class="login-box">
-            <div class="login-logo">S</div>
+            <div class="login-logo">&#128640;</div>
             <h1 class="login-title">SIAB Dashboard</h1>
             <p class="login-subtitle">Secure Infrastructure Application Box</p>
-            <button class="login-btn" onclick="login()">Sign in with Keycloak</button>
+            <button class="btn" onclick="login()">
+                &#128274; Sign in with Keycloak
+            </button>
+            <p style="margin-top: 24px; color: var(--gray-500); font-size: 13px;">
+                Access your deployed applications and system services
+            </p>
         </div>
     </div>
 
-    <!-- Main Dashboard (hidden until logged in) -->
-    <div id="dashboard" class="hidden">
+    <!-- Dashboard -->
+    <div class="dashboard-container" id="dashboardContainer">
         <header class="header">
-            <div class="logo">
-                <div class="logo-icon">S</div>
-                <span class="logo-text">SIAB</span>
+            <div class="header-brand">
+                <span style="font-size: 32px;">&#128640;</span>
+                <h1>SIAB Dashboard</h1>
             </div>
-            <div class="user-info">
-                <span class="user-name" id="userName">Loading...</span>
-                <span class="user-role" id="userRole">-</span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
+            <div class="header-user">
+                <div class="user-info">
+                    <div class="user-name" id="userName">User</div>
+                    <div class="user-role" id="userRole">Role</div>
+                </div>
+                <div class="user-avatar" id="userAvatar">U</div>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
             </div>
         </header>
 
-        <main class="main">
-            <div class="welcome">
-                <h1>Welcome back, <span id="userFirstName">User</span></h1>
-                <p>Manage your applications and services from one place</p>
+        <main class="main-content">
+            <div class="welcome-banner">
+                <h2>Welcome to SIAB</h2>
+                <p>Access your applications and system services from one central location.</p>
             </div>
 
-            <!-- Quick Stats -->
-            <div class="quick-stats" id="quickStats">
-                <div class="stat-card">
-                    <div class="stat-label">Total Applications</div>
-                    <div class="stat-value" id="statTotal">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Healthy</div>
-                    <div class="stat-value success" id="statHealthy">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Warnings</div>
-                    <div class="stat-value warning" id="statWarning">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Errors</div>
-                    <div class="stat-value danger" id="statErrors">-</div>
+            <!-- System Services (Admin Only) -->
+            <div class="admin-only">
+                <h3 class="section-title">
+                    &#128736; System Services
+                    <span class="admin-badge">Admin</span>
+                </h3>
+                <div class="app-grid" id="systemApps">
+                    <!-- Populated by JS -->
                 </div>
             </div>
-
-            <!-- Admin Section (only visible to admins/operators) -->
-            <section class="section" id="adminSection">
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <span class="icon">&#9881;</span>
-                        System Administration
-                    </h2>
-                </div>
-                <div class="tiles-grid" id="adminTiles"></div>
-            </section>
 
             <!-- User Applications -->
-            <section class="section" id="appsSection">
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <span class="icon">&#128187;</span>
-                        Applications
-                    </h2>
-                </div>
-                <div class="tiles-grid" id="appTiles"></div>
-            </section>
+            <h3 class="section-title">&#128230; My Applications</h3>
+            <div class="app-grid" id="userApps">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Loading applications...</p>
+            </div>
         </main>
-    </div>
-
-    <!-- Edit Tile Modal -->
-    <div class="modal-overlay" id="editModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modalTitle">Edit Application</h3>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="editAppId">
-
-                <div class="form-group">
-                    <label class="form-label">Application Name</label>
-                    <input type="text" class="form-input" id="editName" placeholder="my-app">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <input type="text" class="form-input" id="editDescription" placeholder="Application description">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Icon (emoji)</label>
-                    <input type="text" class="form-input" id="editIcon" placeholder="&#128187;">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Category</label>
-                    <select class="form-select" id="editCategory">
-                        <option value="app">Application</option>
-                        <option value="admin">Administration</option>
-                        <option value="system">System</option>
-                        <option value="tool">Tool</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Required Roles (comma-separated)</label>
-                    <input type="text" class="form-input" id="editRoles" placeholder="siab-user, siab-operator">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Required Groups (comma-separated)</label>
-                    <input type="text" class="form-input" id="editGroups" placeholder="users, operators">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Confirmation Modal -->
-    <div class="modal-overlay" id="deleteModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 class="modal-title">Confirm Delete</h3>
-                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to undeploy <strong id="deleteAppName"></strong>?</p>
-                <p style="color: var(--gray-400); margin-top: 0.5rem; font-size: 0.9rem;">
-                    This will remove the deployment, service, and any associated resources.
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="confirmDelete()">Undeploy</button>
-            </div>
-        </div>
     </div>
 
     <script>
         // Configuration
-        const CONFIG = {
-            keycloakUrl: 'https://keycloak.siab.local',
-            realm: 'siab',
-            clientId: 'siab-dashboard',
-            dashboardApiUrl: window.location.origin,
-            deployerApiUrl: 'https://deployer.siab.local'
-        };
+        const KEYCLOAK_URL = 'https://keycloak.siab.local';
+        const REALM = 'siab';
+        const CLIENT_ID = 'siab-dashboard';
+        const SIAB_DOMAIN = 'siab.local';
+        const DEPLOYER_API = 'https://deployer.siab.local';
 
         // State
-        let userInfo = null;
         let accessToken = null;
-        let applications = [];
-        let pendingDelete = null;
+        let userInfo = null;
+        let userRoles = [];
 
-        // System applications (always shown to admins)
-        const SYSTEM_APPS = [
+        // System apps configuration
+        const systemApps = [
             {
-                id: 'keycloak',
                 name: 'Keycloak',
-                description: 'Identity and access management',
-                url: 'https://keycloak.siab.local/admin/',
-                icon: '&#128272;',
-                category: 'admin',
-                status: 'healthy',
-                roles: ['siab-admin'],
-                groups: ['administrators']
+                description: 'Identity & Access Management',
+                url: `https://keycloak.${SIAB_DOMAIN}`,
+                icon: '&#128274;',
+                iconClass: 'security',
+                roles: ['siab-admin']
             },
             {
-                id: 'grafana',
                 name: 'Grafana',
-                description: 'Monitoring and observability dashboards',
-                url: 'https://grafana.siab.local/',
+                description: 'Monitoring & Observability',
+                url: `https://grafana.${SIAB_DOMAIN}`,
                 icon: '&#128200;',
-                category: 'system',
-                status: 'healthy',
-                roles: ['siab-admin', 'siab-operator'],
-                groups: ['administrators', 'operators']
+                iconClass: 'monitoring',
+                roles: ['siab-admin', 'siab-operator']
             },
             {
-                id: 'minio',
-                name: 'MinIO Console',
-                description: 'Object storage management',
-                url: 'https://minio.siab.local/',
+                name: 'MinIO',
+                description: 'Object Storage',
+                url: `https://minio.${SIAB_DOMAIN}`,
                 icon: '&#128451;',
-                category: 'system',
-                status: 'healthy',
-                roles: ['siab-admin'],
-                groups: ['administrators']
+                iconClass: 'storage',
+                roles: ['siab-admin']
             },
             {
-                id: 'longhorn',
                 name: 'Longhorn',
-                description: 'Kubernetes storage management',
-                url: 'https://longhorn.siab.local/',
+                description: 'Distributed Block Storage',
+                url: `https://longhorn.${SIAB_DOMAIN}`,
                 icon: '&#128190;',
-                category: 'system',
-                status: 'healthy',
-                roles: ['siab-admin'],
-                groups: ['administrators']
+                iconClass: 'storage',
+                roles: ['siab-admin']
             },
             {
-                id: 'k8s-dashboard',
                 name: 'Kubernetes Dashboard',
-                description: 'Kubernetes cluster management',
-                url: 'https://k8s-dashboard.siab.local/',
-                icon: '&#9784;',
-                category: 'admin',
-                status: 'healthy',
-                roles: ['siab-admin'],
-                groups: ['administrators']
+                description: 'Cluster Management UI',
+                url: `https://k8s-dashboard.${SIAB_DOMAIN}`,
+                icon: '&#9096;',
+                iconClass: 'system',
+                roles: ['siab-admin', 'siab-operator']
             },
             {
-                id: 'app-deployer',
                 name: 'App Deployer',
-                description: 'Deploy applications from Git, Compose, or Helm',
-                url: 'https://deployer.siab.local/',
+                description: 'Deploy & Manage Applications',
+                url: `https://deployer.${SIAB_DOMAIN}`,
                 icon: '&#128640;',
-                category: 'admin',
-                status: 'healthy',
-                roles: ['siab-admin', 'siab-operator'],
-                groups: ['administrators', 'operators']
+                iconClass: 'system',
+                roles: ['siab-admin', 'siab-operator']
             }
         ];
 
-        // Initialize on page load
-        window.onload = function() {
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
             checkAuth();
-        };
+        });
 
-        // Check if user is authenticated
         function checkAuth() {
-            // Check for token in URL (OAuth2 callback)
-            const hash = window.location.hash;
-            if (hash) {
-                const params = new URLSearchParams(hash.substring(1));
-                const token = params.get('access_token');
-                if (token) {
-                    accessToken = token;
-                    sessionStorage.setItem('access_token', token);
-                    window.location.hash = '';
-                    loadUserInfo();
-                    return;
+            // Check for token in URL hash (OAuth2 implicit flow)
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+
+            if (params.has('access_token')) {
+                accessToken = params.get('access_token');
+                // Clear hash from URL
+                history.replaceState(null, '', window.location.pathname);
+                handleLogin();
+            } else {
+                // Check localStorage
+                const savedToken = localStorage.getItem('siab_token');
+                if (savedToken) {
+                    accessToken = savedToken;
+                    handleLogin();
                 }
             }
-
-            // Check for stored token
-            const storedToken = sessionStorage.getItem('access_token');
-            if (storedToken) {
-                accessToken = storedToken;
-                loadUserInfo();
-                return;
-            }
-
-            // Show login screen
-            document.getElementById('loginScreen').classList.remove('hidden');
-            document.getElementById('dashboard').classList.add('hidden');
         }
 
-        // Redirect to Keycloak login
         function login() {
-            const authUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.realm}/protocol/openid-connect/auth`;
+            const authUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth`;
+            const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
             const params = new URLSearchParams({
-                client_id: CONFIG.clientId,
-                redirect_uri: window.location.origin + window.location.pathname,
+                client_id: CLIENT_ID,
+                redirect_uri: redirectUri,
                 response_type: 'token',
                 scope: 'openid profile email roles'
             });
+
             window.location.href = `${authUrl}?${params}`;
         }
 
-        // Logout
         function logout() {
-            sessionStorage.removeItem('access_token');
-            const logoutUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.realm}/protocol/openid-connect/logout`;
-            const params = new URLSearchParams({
-                post_logout_redirect_uri: window.location.origin + window.location.pathname
-            });
-            window.location.href = `${logoutUrl}?${params}`;
+            localStorage.removeItem('siab_token');
+            accessToken = null;
+            userInfo = null;
+
+            const logoutUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/logout`;
+            const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+            window.location.href = `${logoutUrl}?redirect_uri=${redirectUri}`;
         }
 
-        // Load user info from token
-        function loadUserInfo() {
+        function handleLogin() {
+            // Decode token to get user info
             try {
-                // Decode JWT token
                 const payload = JSON.parse(atob(accessToken.split('.')[1]));
                 userInfo = {
-                    username: payload.preferred_username,
-                    email: payload.email,
-                    firstName: payload.given_name || payload.preferred_username,
-                    lastName: payload.family_name || '',
+                    name: payload.preferred_username || payload.name || 'User',
+                    email: payload.email || '',
                     roles: payload.roles || payload.realm_access?.roles || [],
                     groups: payload.groups || []
                 };
+                userRoles = userInfo.roles;
+
+                // Save token
+                localStorage.setItem('siab_token', accessToken);
 
                 // Update UI
-                document.getElementById('userName').textContent = userInfo.email || userInfo.username;
-                document.getElementById('userFirstName').textContent = userInfo.firstName;
-
-                // Determine primary role for display
-                let displayRole = 'User';
-                if (hasRole('siab-admin')) displayRole = 'Administrator';
-                else if (hasRole('siab-operator')) displayRole = 'Operator';
-                else if (hasRole('siab-viewer')) displayRole = 'Viewer';
-                document.getElementById('userRole').textContent = displayRole;
-
-                // Show dashboard
-                document.getElementById('loginScreen').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
-
-                // Load applications
-                loadApplications();
-
+                showDashboard();
             } catch (e) {
-                console.error('Error parsing token:', e);
-                sessionStorage.removeItem('access_token');
-                checkAuth();
+                console.error('Failed to parse token:', e);
+                localStorage.removeItem('siab_token');
             }
         }
 
-        // Check if user has a specific role
-        function hasRole(role) {
-            return userInfo && userInfo.roles.includes(role);
-        }
+        function showDashboard() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('dashboardContainer').classList.add('active');
 
-        // Check if user is in a specific group
-        function inGroup(group) {
-            return userInfo && userInfo.groups.includes(group);
-        }
+            // Update user info
+            document.getElementById('userName').textContent = userInfo.name;
+            document.getElementById('userRole').textContent = formatRoles(userInfo.roles);
+            document.getElementById('userAvatar').textContent = userInfo.name.charAt(0).toUpperCase();
 
-        // Check if user can access an app
-        function canAccess(app) {
-            if (!app.roles && !app.groups) return true;
-
-            // Check roles
-            if (app.roles && app.roles.length > 0) {
-                if (app.roles.some(r => hasRole(r))) return true;
+            // Check admin status
+            const isAdmin = userRoles.includes('siab-admin') || userRoles.includes('admin');
+            if (isAdmin) {
+                document.body.classList.add('is-admin');
             }
 
-            // Check groups
-            if (app.groups && app.groups.length > 0) {
-                if (app.groups.some(g => inGroup(g))) return true;
-            }
-
-            return false;
+            // Render apps
+            renderSystemApps();
+            loadUserApps();
         }
 
-        // Check if user can manage (edit/delete) apps
-        function canManage() {
-            return hasRole('siab-admin') || hasRole('siab-operator');
+        function formatRoles(roles) {
+            const displayRoles = roles.filter(r => r.startsWith('siab-'));
+            if (displayRoles.length === 0) return 'User';
+            return displayRoles.map(r => r.replace('siab-', '')).join(', ');
         }
 
-        // Load applications from API
-        async function loadApplications() {
+        function renderSystemApps() {
+            const container = document.getElementById('systemApps');
+            const visibleApps = systemApps.filter(app => {
+                if (!app.roles || app.roles.length === 0) return true;
+                return app.roles.some(r => userRoles.includes(r));
+            });
+
+            container.innerHTML = visibleApps.map(app => `
+                <a href="${app.url}" class="app-tile" target="_blank">
+                    <div class="app-tile-status"></div>
+                    <div class="app-tile-header">
+                        <div class="app-tile-icon ${app.iconClass}">${app.icon}</div>
+                        <div class="app-tile-info">
+                            <h3>${app.name}</h3>
+                            <p>${app.description}</p>
+                        </div>
+                    </div>
+                    <div class="app-tile-url">${app.url}</div>
+                </a>
+            `).join('');
+        }
+
+        async function loadUserApps() {
+            const container = document.getElementById('userApps');
+
             try {
-                // Fetch deployed applications
-                const response = await fetch(`${CONFIG.deployerApiUrl}/api/applications?namespace=all`, {
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
+                const response = await fetch(`${DEPLOYER_API}/api/applications?namespace=all`);
+                const data = await response.json();
 
-                if (response.ok) {
-                    const data = await response.json();
-                    applications = data.applications || [];
+                if (!data.applications || data.applications.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">&#128230;</div>
+                            <h3>No applications deployed</h3>
+                            <p style="color: var(--gray-500); margin-bottom: 16px;">Deploy your first application using the App Deployer</p>
+                            <a href="https://deployer.${SIAB_DOMAIN}" class="btn btn-sm" style="display: inline-flex;">
+                                &#128640; Go to App Deployer
+                            </a>
+                        </div>
+                    `;
+                    return;
                 }
-            } catch (e) {
-                console.error('Error loading applications:', e);
-                applications = [];
-            }
 
-            renderDashboard();
-        }
+                container.innerHTML = data.applications.map(app => {
+                    const isRunning = app.ready_replicas === app.replicas && app.ready_replicas > 0;
+                    const appUrl = `https://${app.name}.${SIAB_DOMAIN}`;
 
-        // Render the dashboard
-        function renderDashboard() {
-            const adminTiles = document.getElementById('adminTiles');
-            const appTiles = document.getElementById('appTiles');
-            const adminSection = document.getElementById('adminSection');
+                    return `
+                        <a href="${appUrl}" class="app-tile" target="_blank">
+                            <div class="app-tile-status ${isRunning ? '' : 'pending'}"></div>
+                            <div class="app-tile-header">
+                                <div class="app-tile-icon app">&#128230;</div>
+                                <div class="app-tile-info">
+                                    <h3>${app.name}</h3>
+                                    <p>${app.namespace} &bull; ${app.replicas} replica(s)</p>
+                                </div>
+                            </div>
+                            <div class="app-tile-url">${appUrl}</div>
+                        </a>
+                    `;
+                }).join('');
 
-            // Clear existing tiles
-            adminTiles.innerHTML = '';
-            appTiles.innerHTML = '';
-
-            // Combine system apps with deployed apps
-            const allApps = [...SYSTEM_APPS];
-
-            // Add deployed applications
-            applications.forEach(app => {
-                if (!allApps.find(a => a.name === app.name)) {
-                    allApps.push({
-                        id: app.name,
-                        name: app.name,
-                        description: app.description || `Deployed in ${app.namespace}`,
-                        url: app.url || `https://${app.name}.siab.local/`,
-                        icon: app.icon || '&#128187;',
-                        category: app.category || 'app',
-                        status: app.ready ? 'healthy' : 'warning',
-                        namespace: app.namespace,
-                        roles: app.roles || ['siab-user'],
-                        groups: app.groups || ['users'],
-                        deployed: true
-                    });
-                }
-            });
-
-            // Separate into admin and user apps
-            const adminApps = allApps.filter(a =>
-                (a.category === 'admin' || a.category === 'system') && canAccess(a)
-            );
-            const userApps = allApps.filter(a =>
-                a.category !== 'admin' && a.category !== 'system' && canAccess(a)
-            );
-
-            // Show/hide admin section
-            if (adminApps.length > 0 && canManage()) {
-                adminSection.classList.remove('hidden');
-                adminApps.forEach(app => {
-                    adminTiles.appendChild(createTile(app));
-                });
-            } else {
-                adminSection.classList.add('hidden');
-            }
-
-            // Render user apps
-            userApps.forEach(app => {
-                appTiles.appendChild(createTile(app));
-            });
-
-            // Add "Add App" tile for operators/admins
-            if (canManage()) {
-                const addTile = document.createElement('div');
-                addTile.className = 'tile add-tile';
-                addTile.onclick = () => window.open(CONFIG.deployerApiUrl, '_blank');
-                addTile.innerHTML = `
-                    <div class="add-icon">+</div>
-                    <div>Deploy New Application</div>
-                `;
-                appTiles.appendChild(addTile);
-            }
-
-            // Update stats
-            updateStats(allApps);
-        }
-
-        // Create a tile element
-        function createTile(app) {
-            const tile = document.createElement('div');
-            tile.className = 'tile';
-            tile.onclick = (e) => {
-                if (!e.target.closest('.admin-btn')) {
-                    window.open(app.url, '_blank');
-                }
-            };
-
-            const statusClass = app.status === 'healthy' ? 'healthy' :
-                               app.status === 'warning' ? 'warning' : 'error';
-            const iconClass = app.category === 'admin' ? 'admin' :
-                             app.category === 'system' ? 'system' :
-                             app.category === 'tool' ? 'tool' : 'app';
-
-            let adminHtml = '';
-            if (canManage() && app.deployed) {
-                adminHtml = `
-                    <div class="admin-actions">
-                        <button class="admin-btn edit" onclick="editApp('${app.id}')" title="Edit">&#9998;</button>
-                        <button class="admin-btn delete" onclick="deleteApp('${app.id}', '${app.name}')" title="Undeploy">&#128465;</button>
+            } catch (error) {
+                console.error('Failed to load apps:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#9888;</div>
+                        <h3>Unable to load applications</h3>
+                        <p style="color: var(--gray-500);">Please try again later</p>
                     </div>
                 `;
             }
-
-            tile.innerHTML = `
-                ${adminHtml}
-                <div class="tile-header">
-                    <div class="tile-icon ${iconClass}">${app.icon}</div>
-                    <div class="tile-status ${statusClass}">
-                        <span class="dot"></span>
-                        ${app.status}
-                    </div>
-                </div>
-                <div class="tile-name">${app.name}</div>
-                <div class="tile-description">${app.description}</div>
-                <div class="tile-footer">
-                    <span class="tile-url">${new URL(app.url).hostname}</span>
-                    ${app.deployed ? '<span class="tile-badge">Deployed</span>' : ''}
-                </div>
-            `;
-
-            return tile;
         }
 
-        // Update statistics
-        function updateStats(apps) {
-            const accessible = apps.filter(a => canAccess(a));
-            const healthy = accessible.filter(a => a.status === 'healthy').length;
-            const warning = accessible.filter(a => a.status === 'warning').length;
-            const errors = accessible.filter(a => a.status === 'error').length;
-
-            document.getElementById('statTotal').textContent = accessible.length;
-            document.getElementById('statHealthy').textContent = healthy;
-            document.getElementById('statWarning').textContent = warning;
-            document.getElementById('statErrors').textContent = errors;
-        }
-
-        // Edit application
-        function editApp(appId) {
-            const app = applications.find(a => a.name === appId) ||
-                       SYSTEM_APPS.find(a => a.id === appId);
-            if (!app) return;
-
-            document.getElementById('editAppId').value = appId;
-            document.getElementById('editName').value = app.name;
-            document.getElementById('editDescription').value = app.description || '';
-            document.getElementById('editIcon').value = app.icon || '';
-            document.getElementById('editCategory').value = app.category || 'app';
-            document.getElementById('editRoles').value = (app.roles || []).join(', ');
-            document.getElementById('editGroups').value = (app.groups || []).join(', ');
-
-            document.getElementById('editModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('editModal').classList.remove('active');
-        }
-
-        async function saveEdit() {
-            const appId = document.getElementById('editAppId').value;
-            const updates = {
-                description: document.getElementById('editDescription').value,
-                icon: document.getElementById('editIcon').value,
-                category: document.getElementById('editCategory').value,
-                roles: document.getElementById('editRoles').value.split(',').map(s => s.trim()).filter(Boolean),
-                groups: document.getElementById('editGroups').value.split(',').map(s => s.trim()).filter(Boolean)
-            };
-
-            try {
-                await fetch(`${CONFIG.deployerApiUrl}/api/applications/${appId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`
-                    },
-                    body: JSON.stringify(updates)
-                });
-
-                closeModal();
-                loadApplications();
-            } catch (e) {
-                console.error('Error updating app:', e);
-                alert('Failed to update application');
+        // Auto-refresh apps every 30 seconds
+        setInterval(() => {
+            if (accessToken) {
+                loadUserApps();
             }
-        }
-
-        // Delete application
-        function deleteApp(appId, appName) {
-            pendingDelete = { id: appId, name: appName };
-            document.getElementById('deleteAppName').textContent = appName;
-            document.getElementById('deleteModal').classList.add('active');
-        }
-
-        function closeDeleteModal() {
-            pendingDelete = null;
-            document.getElementById('deleteModal').classList.remove('active');
-        }
-
-        async function confirmDelete() {
-            if (!pendingDelete) return;
-
-            try {
-                const response = await fetch(`${CONFIG.deployerApiUrl}/api/applications/${pendingDelete.id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-
-                if (response.ok) {
-                    closeDeleteModal();
-                    loadApplications();
-                } else {
-                    const data = await response.json();
-                    alert('Failed to undeploy: ' + (data.error || 'Unknown error'));
-                }
-            } catch (e) {
-                console.error('Error deleting app:', e);
-                alert('Failed to undeploy application');
-            }
-        }
+        }, 30000);
     </script>
 </body>
 </html>
