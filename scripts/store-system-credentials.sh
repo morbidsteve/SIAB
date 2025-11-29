@@ -78,15 +78,20 @@ EOF
 
 echo ""
 echo "--- Kubernetes Dashboard ---"
-# Get K8s Dashboard token
-K8S_TOKEN=$(kubectl get secret siab-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || echo "")
+# Generate a fresh long-lived token using kubectl create token (modern K8s 1.24+ method)
+# This creates a proper JWT token that works with K8s Dashboard
+K8S_TOKEN=$(kubectl create token siab-admin -n kubernetes-dashboard --duration=87600h 2>/dev/null || echo "")
+if [ -z "$K8S_TOKEN" ]; then
+    # Fallback: try reading from the static secret (older method)
+    K8S_TOKEN=$(kubectl get secret siab-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || echo "")
+fi
 if [ -n "$K8S_TOKEN" ]; then
     store_token_credential "kubernetes-dashboard" \
         "$K8S_TOKEN" \
         "https://k8s-dashboard.siab.local" \
-        "Use this bearer token to login to Kubernetes Dashboard"
+        "Use this bearer token to login to Kubernetes Dashboard (valid for 10 years)"
 else
-    echo "Warning: Could not retrieve K8s Dashboard token"
+    echo "Warning: Could not generate K8s Dashboard token"
 fi
 
 echo ""
