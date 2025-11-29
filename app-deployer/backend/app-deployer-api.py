@@ -359,84 +359,181 @@ def parse_docker_compose(compose_content):
         raise
 
 
-def create_deployment_from_dockerfile(name, dockerfile_content, namespace, port=8080):
-    """Create deployment from Dockerfile by building and deploying"""
+def check_prebuilt_image(dockerfile_content, repo_info=None):
+    """Check if a pre-built image exists for this Dockerfile source"""
+    # Check for linuxserver images
+    if repo_info and 'linuxserver' in repo_info.get('org', '').lower():
+        repo_name = repo_info.get('repo', '').replace('docker-', '')
+        if repo_name:
+            image = f"lscr.io/linuxserver/{repo_name}:latest"
+            # Different linuxserver images use different ports
+            # Most web UIs use 3000, but server apps use 80/443
+            port_map = {
+                'nextcloud': 80,
+                'nginx': 80,
+                'swag': 443,
+                'heimdall': 80,
+                'mariadb': 3306,
+                'postgres': 5432,
+                'plex': 32400,
+                'jellyfin': 8096,
+                'emby': 8096,
+                'sonarr': 8989,
+                'radarr': 7878,
+                'lidarr': 8686,
+                'prowlarr': 9696,
+                'qbittorrent': 8080,
+                'transmission': 9091,
+                'code-server': 8443,
+                'webtop': 3000,
+                'firefox': 3000,
+                'chromium': 3000,
+            }
+            port = port_map.get(repo_name, 3000)  # Default to 3000 for web UI apps
+            return image, port
+
+    # Check for ghcr.io reference in Dockerfile
+    ghcr_match = re.search(r'ghcr\.io/([^/\s]+)/([^:\s]+)', dockerfile_content)
+    if ghcr_match:
+        return f"ghcr.io/{ghcr_match.group(1)}/{ghcr_match.group(2)}:latest", 8080
+
+    # Check FROM line for usable base image
+    from_match = re.search(r'FROM\s+([^\s\n]+)', dockerfile_content, re.IGNORECASE)
+    if from_match:
+        base_image = from_match.group(1)
+        # If FROM uses a specific app image (not a base like alpine/ubuntu), suggest it
+        base_lower = base_image.lower()
+        if not any(base in base_lower for base in ['alpine', 'ubuntu', 'debian', 'python', 'node', 'golang', 'rust']):
+            return base_image, 8080
+
+    return None, None
+
+
+def create_deployment_from_image(name, image, namespace, port=8080, env_vars=None):
+    """Create deployment from a pre-built image"""
+    deployment = {
+        'apiVersion': 'apps/v1',
+        'kind': 'Deployment',
+        'metadata': {
+            'name': name,
+            'namespace': namespace,
+            'labels': {
+                'app': name,
+                'deployed-by': 'siab-deployer'
+            }
+        },
+        'spec': {
+            'replicas': 1,
+            'selector': {
+                'matchLabels': {
+                    'app': name
+                }
+            },
+            'template': {
+                'metadata': {
+                    'labels': {
+                        'app': name
+                    }
+                },
+                'spec': {
+                    'containers': [{
+                        'name': name,
+                        'image': image,
+                        'imagePullPolicy': 'Always',
+                        'ports': [{
+                            'containerPort': port,
+                            'name': 'http'
+                        }],
+                        'env': env_vars or []
+                    }],
+                    'securityContext': {
+                        'fsGroup': 1000
+                    }
+                }
+            }
+        }
+    }
+
+    service = {
+        'apiVersion': 'v1',
+        'kind': 'Service',
+        'metadata': {
+            'name': name,
+            'namespace': namespace
+        },
+        'spec': {
+            'selector': {
+                'app': name
+            },
+            'ports': [{
+                'port': 80,
+                'targetPort': port,
+                'name': 'http'
+            }]
+        }
+    }
+
+    return [deployment, service], None
+
+
+def create_deployment_from_dockerfile(name, dockerfile_content, namespace, port=8080, repo_info=None):
+    """Create deployment from Dockerfile - uses pre-built image if available"""
     try:
+        # First, check if a pre-built image exists
+        prebuilt_image, suggested_port = check_prebuilt_image(dockerfile_content, repo_info)
+
+        if prebuilt_image:
+            logger.info(f"Using pre-built image: {prebuilt_image}")
+            # Use linuxserver-specific env vars if applicable
+            env_vars = []
+            if 'linuxserver' in prebuilt_image:
+                env_vars = [
+                    {'name': 'PUID', 'value': '1000'},
+                    {'name': 'PGID', 'value': '1000'},
+                    {'name': 'TZ', 'value': 'UTC'}
+                ]
+            return create_deployment_from_image(
+                name,
+                prebuilt_image,
+                namespace,
+                port=suggested_port or port,
+                env_vars=env_vars
+            )
+
+        # No pre-built image found - check if we can build
+        # Check for buildah or docker
+        buildah_check = run_command('which buildah')
+        docker_check = run_command('which docker')
+
+        if not buildah_check['success'] and not docker_check['success']:
+            return None, (
+                "Cannot build Dockerfile: No container build tools available. "
+                "Please either:\n"
+                "1. Use a pre-built image from Docker Hub or GHCR\n"
+                "2. Provide a Kubernetes manifest or docker-compose file\n"
+                "3. Use the Quick Deploy with an existing image"
+            )
+
         # Create temporary directory for build context
         with tempfile.TemporaryDirectory() as tmpdir:
             dockerfile_path = os.path.join(tmpdir, 'Dockerfile')
             with open(dockerfile_path, 'w') as f:
                 f.write(dockerfile_content)
 
-            # Build image using buildah (available in SIAB)
+            # Build image using buildah or docker
             image_name = f"localhost/{name}:latest"
-            build_cmd = f"buildah bud -t {image_name} {tmpdir} 2>&1 || docker build -t {image_name} {tmpdir}"
+            if buildah_check['success']:
+                build_cmd = f"buildah bud -t {image_name} {tmpdir}"
+            else:
+                build_cmd = f"docker build -t {image_name} {tmpdir}"
+
             result = run_command(build_cmd)
 
             if not result['success']:
                 return None, f"Build failed: {result['stderr']}"
 
-            # Create deployment manifest
-            deployment = {
-                'apiVersion': 'apps/v1',
-                'kind': 'Deployment',
-                'metadata': {
-                    'name': name,
-                    'namespace': namespace,
-                    'labels': {
-                        'app': name,
-                        'deployed-by': 'siab-deployer'
-                    }
-                },
-                'spec': {
-                    'replicas': 1,
-                    'selector': {
-                        'matchLabels': {
-                            'app': name
-                        }
-                    },
-                    'template': {
-                        'metadata': {
-                            'labels': {
-                                'app': name
-                            }
-                        },
-                        'spec': {
-                            'containers': [{
-                                'name': name,
-                                'image': image_name,
-                                'imagePullPolicy': 'IfNotPresent',
-                                'ports': [{
-                                    'containerPort': port,
-                                    'name': 'http'
-                                }]
-                            }]
-                        }
-                    }
-                }
-            }
+            return create_deployment_from_image(name, image_name, namespace, port)
 
-            # Create service
-            service = {
-                'apiVersion': 'v1',
-                'kind': 'Service',
-                'metadata': {
-                    'name': name,
-                    'namespace': namespace
-                },
-                'spec': {
-                    'selector': {
-                        'app': name
-                    },
-                    'ports': [{
-                        'port': 80,
-                        'targetPort': port,
-                        'name': 'http'
-                    }]
-                }
-            }
-
-            return [deployment, service], None
     except Exception as e:
         return None, str(e)
 
@@ -476,6 +573,7 @@ def fetch_git():
         # Handle GitHub/GitLab raw file URLs
         content = None
         filename = 'manifest.yaml'
+        repo_info = None  # Track repo org/name for pre-built image detection
 
         # Convert GitHub blob URLs to raw URLs
         if 'github.com' in url and '/blob/' in url:
@@ -490,6 +588,12 @@ def fetch_git():
             # Try to fetch common deployment files
             repo_parts = url.rstrip('/').split('/')
             if len(repo_parts) >= 5:
+                # Extract repo info for pre-built image detection
+                repo_info = {
+                    'org': repo_parts[3],
+                    'repo': repo_parts[4]
+                }
+
                 base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/main"
                 files_to_try = [
                     'kubernetes.yaml', 'k8s.yaml', 'deployment.yaml', 'deploy.yaml',
@@ -522,22 +626,43 @@ def fetch_git():
                         except urllib.error.HTTPError:
                             continue
 
-        # Direct URL fetch
+        # Direct URL fetch (only for raw file URLs, not repo pages)
         if not content:
+            # Don't try to fetch GitHub repo pages directly - they return HTML
+            if 'github.com' in url and '/raw/' not in url and 'raw.githubusercontent.com' not in url:
+                # This is a repo URL where we couldn't find any deployment files
+                return jsonify({
+                    'success': False,
+                    'error': 'No deployment files found in repository. Looking for: Dockerfile, docker-compose.yml, kubernetes.yaml, Chart.yaml'
+                }), 404
+
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'SIAB-Deployer'})
                 response = urllib.request.urlopen(req, timeout=30)
                 content = response.read().decode('utf-8')
                 filename = url.split('/')[-1] or 'manifest.yaml'
+
+                # Safety check: if we got HTML instead of expected content, fail
+                if content.strip().startswith('<!DOCTYPE') or content.strip().startswith('<html'):
+                    return jsonify({
+                        'success': False,
+                        'error': 'URL returned HTML instead of deployment content. Please provide a raw file URL.'
+                    }), 400
             except Exception as e:
                 return jsonify({'success': False, 'error': f'Failed to fetch URL: {str(e)}'}), 400
 
         if content:
+            detected = detect_content_type(content, filename)
+            # Add repo_info for pre-built image detection
+            if repo_info:
+                detected['repo_info'] = repo_info
+
             return jsonify({
                 'success': True,
                 'content': content,
                 'filename': filename,
-                'detected_type': detect_content_type(content, filename)
+                'detected_type': detected,
+                'repo_info': repo_info
             })
         else:
             return jsonify({'success': False, 'error': 'No deployable content found in repository'}), 404
@@ -559,6 +684,7 @@ def smart_deploy():
         integrations = data.get('integrations', {})
         port = data.get('port', 80)
         helm_values = data.get('helmValues', '')
+        repo_info = data.get('repo_info')  # For pre-built image detection
 
         if not name or not content:
             return jsonify({'success': False, 'error': 'Name and content are required'}), 400
@@ -600,8 +726,10 @@ def smart_deploy():
                 service_name = manifests[0]['metadata']['name']
 
         elif content_type == 'dockerfile':
-            # Build and deploy from Dockerfile
-            built_manifests, error = create_deployment_from_dockerfile(name, content, namespace, port)
+            # Build and deploy from Dockerfile (uses pre-built image if available)
+            built_manifests, error = create_deployment_from_dockerfile(
+                name, content, namespace, port, repo_info=repo_info
+            )
             if error:
                 return jsonify({'success': False, 'error': error}), 500
 
@@ -611,7 +739,13 @@ def smart_deploy():
                 if not result['success']:
                     return jsonify({'success': False, 'error': result['stderr']}), 500
 
+            # Get port from the generated manifests
             service_port = 80
+            for m in built_manifests:
+                if m.get('kind') == 'Service':
+                    ports = m.get('spec', {}).get('ports', [])
+                    if ports:
+                        service_port = ports[0].get('port', 80)
 
         elif content_type == 'helm':
             # Helm chart deployment
@@ -1136,6 +1270,108 @@ def get_application_logs(name):
         })
     except Exception as e:
         logger.error(f"Get logs error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/applications/<name>', methods=['PATCH'])
+def update_application(name):
+    """Update application metadata (annotations for dashboard)"""
+    try:
+        data = request.get_json()
+        namespace = request.args.get('namespace', 'default')
+
+        # Build annotation patch
+        annotations = {}
+        if 'description' in data:
+            annotations['siab.local/description'] = data['description']
+        if 'icon' in data:
+            annotations['siab.local/icon'] = data['icon']
+        if 'category' in data:
+            annotations['siab.local/category'] = data['category']
+        if 'roles' in data:
+            annotations['siab.local/roles'] = ','.join(data['roles']) if isinstance(data['roles'], list) else data['roles']
+        if 'groups' in data:
+            annotations['siab.local/groups'] = ','.join(data['groups']) if isinstance(data['groups'], list) else data['groups']
+
+        if not annotations:
+            return jsonify({'success': True, 'message': 'No updates provided'})
+
+        # Patch the deployment
+        patch = {'metadata': {'annotations': annotations}}
+        patch_json = json.dumps(patch)
+
+        cmd = f"kubectl patch deployment {name} -n {namespace} --type=merge -p '{patch_json}'"
+        result = run_command(cmd)
+
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': f'Application {name} updated'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result['stderr']
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Update application error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/applications/<name>', methods=['GET'])
+def get_application(name):
+    """Get detailed application info"""
+    try:
+        namespace = request.args.get('namespace', 'default')
+
+        cmd = f"kubectl get deployment {name} -n {namespace} -o json"
+        result = run_command(cmd)
+
+        if not result['success']:
+            return jsonify({'error': 'Application not found'}), 404
+
+        deployment = json.loads(result['stdout'])
+        metadata = deployment.get('metadata', {})
+        annotations = metadata.get('annotations', {})
+        spec = deployment.get('spec', {})
+        status = deployment.get('status', {})
+
+        # Get pod status
+        pod_cmd = f"kubectl get pods -n {namespace} -l app={name} -o json"
+        pod_result = run_command(pod_cmd)
+        pods = []
+        if pod_result['success']:
+            pod_data = json.loads(pod_result['stdout'])
+            for pod in pod_data.get('items', []):
+                pod_status = pod.get('status', {})
+                pods.append({
+                    'name': pod['metadata']['name'],
+                    'phase': pod_status.get('phase'),
+                    'ready': all(c.get('ready', False) for c in pod_status.get('containerStatuses', []))
+                })
+
+        return jsonify({
+            'success': True,
+            'application': {
+                'name': name,
+                'namespace': namespace,
+                'description': annotations.get('siab.local/description', ''),
+                'icon': annotations.get('siab.local/icon', ''),
+                'category': annotations.get('siab.local/category', 'app'),
+                'roles': annotations.get('siab.local/roles', '').split(',') if annotations.get('siab.local/roles') else [],
+                'groups': annotations.get('siab.local/groups', '').split(',') if annotations.get('siab.local/groups') else [],
+                'replicas': spec.get('replicas', 0),
+                'ready_replicas': status.get('readyReplicas', 0),
+                'image': spec.get('template', {}).get('spec', {}).get('containers', [{}])[0].get('image', ''),
+                'created': metadata.get('creationTimestamp'),
+                'pods': pods,
+                'url': f"https://{name}.{SIAB_DOMAIN}/"
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Get application error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
