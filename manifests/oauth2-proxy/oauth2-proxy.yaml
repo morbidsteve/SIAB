@@ -1,0 +1,137 @@
+---
+# OAuth2 Proxy for protecting user-deployed applications
+# This proxy handles Keycloak authentication and session management
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oauth2-proxy
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth2-proxy-secret
+  namespace: oauth2-proxy
+type: Opaque
+stringData:
+  # Generate with: python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
+  cookie-secret: "CHANGEME_GENERATE_WITH_COMMAND_ABOVE"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-config
+  namespace: oauth2-proxy
+data:
+  oauth2-proxy.cfg: |
+    # OAuth2 Proxy Configuration for Keycloak
+    provider = "keycloak-oidc"
+    provider_display_name = "SIAB Login"
+
+    # Keycloak OIDC endpoints
+    oidc_issuer_url = "https://keycloak.siab.local/realms/siab"
+    login_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/auth"
+    redeem_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/token"
+    profile_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/userinfo"
+    validate_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/userinfo"
+
+    # Client configuration (create in Keycloak)
+    client_id = "siab-oauth2-proxy"
+    # client_secret set via environment variable
+
+    # Cookie configuration
+    cookie_name = "_siab_oauth2"
+    cookie_secure = true
+    cookie_domains = [".siab.local"]
+    cookie_expire = "168h"
+    cookie_refresh = "1h"
+
+    # Proxy behavior
+    email_domains = ["*"]
+    skip_provider_button = true
+    reverse_proxy = true
+
+    # Headers to pass upstream
+    pass_access_token = true
+    pass_authorization_header = true
+    set_authorization_header = true
+    set_xauthrequest = true
+
+    # SSL verification for self-signed certs
+    ssl_insecure_skip_verify = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+      - name: oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+        args:
+        - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+        - --http-address=0.0.0.0:4180
+        env:
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-client
+              key: client-secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy-secret
+              key: cookie-secret
+        ports:
+        - containerPort: 4180
+          name: http
+        volumeMounts:
+        - name: config
+          mountPath: /etc/oauth2-proxy
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 4180
+          initialDelaySeconds: 10
+          periodSeconds: 30
+      volumes:
+      - name: config
+        configMap:
+          name: oauth2-proxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  selector:
+    app: oauth2-proxy
+  ports:
+  - port: 80
+    targetPort: 4180
+    name: http

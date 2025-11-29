@@ -784,7 +784,7 @@
                         <div class="empty-state-icon">&#128230;</div>
                         <h3>No applications deployed</h3>
                         <p>Deploy your first application to get started</p>
-                        <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy')">
+                        <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy', null)">
                             &#128640; Deploy Now
                         </button>
                     </div>
@@ -986,7 +986,7 @@
                         <div class="empty-state-icon">&#128230;</div>
                         <h3>No applications deployed</h3>
                         <p>Deploy your first application to get started</p>
-                        <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy')">
+                        <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy', null)">
                             &#128640; Deploy Now
                         </button>
                     </div>
@@ -1225,7 +1225,7 @@
                         showAlert(`Access at: ${data.access_url}`, 'info');
                     }
                     resetForm();
-                    showPage('apps');
+                    showPage('apps', null);
                     loadApplications();
                 } else {
                     showAlert(data.error || 'Deployment failed', 'error');
