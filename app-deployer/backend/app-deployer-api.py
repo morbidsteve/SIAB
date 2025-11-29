@@ -30,9 +30,17 @@ from datetime import datetime
 import urllib.request
 import urllib.error
 import base64
+import secrets
+import string
 
 app = Flask(__name__, static_folder='/app/frontend', static_url_path='')
 CORS(app)
+
+
+def generate_password(length=24):
+    """Generate a secure random password"""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -147,6 +155,130 @@ spec:
 """
     result = run_command('kubectl apply -f -', input_data=pvc)
     return result['success']
+
+
+def store_app_credentials(name, namespace, username, password, extra_info=None):
+    """Store application credentials in a protected Kubernetes Secret
+
+    Credentials are stored in siab-system namespace for admin access only.
+    """
+    # Create the credentials secret in siab-system namespace (protected)
+    secret_data = {
+        'app-name': name,
+        'app-namespace': namespace,
+        'username': username,
+        'password': password,
+        'created': datetime.now().isoformat()
+    }
+
+    if extra_info:
+        for key, value in extra_info.items():
+            secret_data[key] = str(value)
+
+    # Convert to base64 for Kubernetes secret
+    encoded_data = {k: base64.b64encode(v.encode()).decode() for k, v in secret_data.items()}
+
+    secret = f"""
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-creds-{name}
+  namespace: siab-system
+  labels:
+    siab.local/credential-type: app-credentials
+    siab.local/app-name: {name}
+    siab.local/app-namespace: {namespace}
+type: Opaque
+data:
+"""
+    for key, value in encoded_data.items():
+        secret += f"  {key}: {value}\n"
+
+    result = run_command('kubectl apply -f -', input_data=secret)
+    if result['success']:
+        logger.info(f"Stored credentials for {name} in siab-system/app-creds-{name}")
+    else:
+        logger.error(f"Failed to store credentials for {name}: {result['stderr']}")
+
+    return result['success']
+
+
+def get_app_credentials(name):
+    """Retrieve application credentials from the protected secret"""
+    cmd = f"kubectl get secret app-creds-{name} -n siab-system -o json"
+    result = run_command(cmd)
+
+    if not result['success']:
+        return None
+
+    try:
+        secret = json.loads(result['stdout'])
+        data = secret.get('data', {})
+        decoded = {k: base64.b64decode(v).decode() for k, v in data.items()}
+        return decoded
+    except Exception as e:
+        logger.error(f"Failed to decode credentials for {name}: {e}")
+        return None
+
+
+def create_keycloak_client_for_app(name, hostname):
+    """Create a Keycloak client for an application that supports OIDC
+
+    Returns client_id and client_secret for the app to use.
+    """
+    client_id = f"siab-app-{name}"
+    client_secret = secrets.token_urlsafe(32)
+
+    # Get admin token from Keycloak
+    token_result = run_command("""
+        curl -sk -X POST 'https://keycloak.siab.local/realms/master/protocol/openid-connect/token' \
+        -H 'Content-Type: application/x-www-form-urlencoded' \
+        -d 'username=admin' \
+        -d 'password=admin' \
+        -d 'grant_type=password' \
+        -d 'client_id=admin-cli' | jq -r '.access_token'
+    """)
+
+    if not token_result['success'] or not token_result['stdout'].strip():
+        logger.warning("Could not get Keycloak admin token - skipping client creation")
+        return None, None
+
+    admin_token = token_result['stdout'].strip()
+
+    # Create the client in Keycloak
+    client_config = {
+        "clientId": client_id,
+        "name": f"SIAB App: {name}",
+        "enabled": True,
+        "clientAuthenticatorType": "client-secret",
+        "secret": client_secret,
+        "redirectUris": [
+            f"https://{hostname}/*",
+            f"https://{hostname}/apps/oidc/*"
+        ],
+        "webOrigins": [f"https://{hostname}"],
+        "protocol": "openid-connect",
+        "publicClient": False,
+        "standardFlowEnabled": True,
+        "directAccessGrantsEnabled": False,
+        "attributes": {
+            "post.logout.redirect.uris": f"https://{hostname}/*"
+        }
+    }
+
+    create_result = run_command(f"""
+        curl -sk -X POST 'https://keycloak.siab.local/admin/realms/siab/clients' \
+        -H 'Authorization: Bearer {admin_token}' \
+        -H 'Content-Type: application/json' \
+        -d '{json.dumps(client_config)}'
+    """)
+
+    if create_result['returncode'] == 0:
+        logger.info(f"Created Keycloak client {client_id} for {name}")
+        return client_id, client_secret
+    else:
+        logger.warning(f"Failed to create Keycloak client for {name}")
+        return None, None
 
 
 def create_minio_bucket_secret(name, namespace, bucket_name=None):
@@ -859,11 +991,61 @@ spec:
 """
             run_command('kubectl apply -f -', input_data=auth_policy)
 
+        # Generate and store credentials for apps that need them
+        credentials_info = None
+        apps_needing_credentials = [
+            'nextcloud', 'wordpress', 'gitea', 'gitlab', 'jenkins',
+            'grafana', 'minio', 'portainer', 'rancher', 'harbor',
+            'keycloak', 'vault', 'consul', 'mysql', 'postgres',
+            'mariadb', 'mongodb', 'redis', 'rabbitmq', 'elasticsearch'
+        ]
+
+        # Check if this app needs credentials
+        app_lower = name.lower()
+        needs_creds = any(app in app_lower for app in apps_needing_credentials)
+
+        if needs_creds or integrations.get('generate_credentials'):
+            admin_username = 'admin'
+            admin_password = generate_password()
+
+            # Store credentials in protected secret
+            hostname = integrations.get('hostname') or f"{name}.{SIAB_DOMAIN}"
+            extra_info = {
+                'url': f"https://{hostname}",
+                'notes': 'Set these credentials during first-time setup of the application'
+            }
+
+            # For apps that support OIDC, create Keycloak client
+            oidc_apps = ['nextcloud', 'gitea', 'gitlab', 'grafana', 'portainer']
+            if any(app in app_lower for app in oidc_apps):
+                client_id, client_secret = create_keycloak_client_for_app(name, hostname)
+                if client_id:
+                    extra_info['oidc_client_id'] = client_id
+                    extra_info['oidc_client_secret'] = client_secret
+                    extra_info['oidc_issuer'] = 'https://keycloak.siab.local/realms/siab'
+                    extra_info['oidc_notes'] = 'Configure OIDC in app settings to enable SSO with Keycloak'
+
+            store_app_credentials(name, namespace, admin_username, admin_password, extra_info)
+
+            credentials_info = {
+                'username': admin_username,
+                'password': admin_password,
+                'stored_in': f'siab-system/app-creds-{name}',
+                'notes': 'Use these credentials for initial setup. Credentials are stored securely in Kubernetes.'
+            }
+            if 'oidc_client_id' in extra_info:
+                credentials_info['oidc'] = {
+                    'client_id': extra_info['oidc_client_id'],
+                    'issuer': extra_info['oidc_issuer'],
+                    'notes': extra_info['oidc_notes']
+                }
+
         return jsonify({
             'success': True,
             'message': f'Application {name} deployed successfully',
             'namespace': namespace,
             'access_url': access_url,
+            'credentials': credentials_info,
             'integrations': {
                 'istio': integrations.get('istio', True),
                 'ingress': integrations.get('ingress', False),
@@ -1373,6 +1555,62 @@ def get_application(name):
     except Exception as e:
         logger.error(f"Get application error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/credentials/<name>', methods=['GET'])
+def get_credentials(name):
+    """Get stored credentials for an application (admin only)
+
+    Credentials are stored in siab-system namespace which requires admin access.
+    """
+    try:
+        creds = get_app_credentials(name)
+        if creds:
+            return jsonify({
+                'success': True,
+                'credentials': creds
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'No credentials found for {name}'
+            }), 404
+    except Exception as e:
+        logger.error(f"Get credentials error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/credentials', methods=['GET'])
+def list_all_credentials():
+    """List all stored application credentials (admin only)"""
+    try:
+        cmd = "kubectl get secrets -n siab-system -l siab.local/credential-type=app-credentials -o json"
+        result = run_command(cmd)
+
+        if not result['success']:
+            return jsonify({'credentials': []})
+
+        secrets_data = json.loads(result['stdout'])
+        creds_list = []
+
+        for secret in secrets_data.get('items', []):
+            metadata = secret.get('metadata', {})
+            labels = metadata.get('labels', {})
+            data = secret.get('data', {})
+
+            # Decode only non-sensitive fields for the list view
+            creds_list.append({
+                'name': labels.get('siab.local/app-name', metadata.get('name', '').replace('app-creds-', '')),
+                'namespace': labels.get('siab.local/app-namespace', 'unknown'),
+                'secret_name': metadata.get('name'),
+                'created': metadata.get('creationTimestamp'),
+                'has_oidc': 'oidc_client_id' in {base64.b64decode(k).decode() if k else '' for k in data.keys()}
+            })
+
+        return jsonify({'credentials': creds_list})
+    except Exception as e:
+        logger.error(f"List credentials error: {str(e)}")
+        return jsonify({'credentials': []})
 
 
 @app.route('/api/namespaces', methods=['GET'])
