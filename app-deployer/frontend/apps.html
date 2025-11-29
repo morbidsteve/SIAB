@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Applications - SIAB</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5a67d8;
+            --secondary: #764ba2;
+            --success: #48bb78;
+            --warning: #ed8936;
+            --danger: #f56565;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px 30px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: var(--gray-900);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-200);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filters select {
+            padding: 10px 14px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        .filters select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .app-card {
+            background: var(--gray-50);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .app-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .app-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .app-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .app-title h3 {
+            color: var(--gray-900);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .app-title p {
+            color: var(--gray-500);
+            font-size: 13px;
+        }
+
+        .app-status {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .app-status.running {
+            background: #c6f6d5;
+            color: #276749;
+        }
+
+        .app-status.pending {
+            background: #feebc8;
+            color: #c05621;
+        }
+
+        .app-status.failed {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .app-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .meta-item label {
+            display: block;
+            font-size: 11px;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .meta-item span {
+            font-size: 13px;
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+
+        .app-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-500);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: var(--gray-700);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            margin-bottom: 16px;
+            color: var(--gray-900);
+        }
+
+        .logs-container {
+            background: var(--gray-900);
+            color: #a5f3fc;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        /* Alert */
+        .alert-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1001;
+        }
+
+        .alert {
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .alert-success {
+            background: #f0fff4;
+            border: 1px solid var(--success);
+            color: #276749;
+        }
+
+        .alert-error {
+            background: #fff5f5;
+            border: 1px solid var(--danger);
+            color: #c53030;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray-500);
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--gray-200);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>&#128230; My Applications</h1>
+            <div style="display: flex; gap: 12px;">
+                <a href="/" class="btn">&#10133; Deploy New</a>
+                <a href="https://catalog.siab.local" class="btn btn-secondary">&#128218; Catalog</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="filters">
+                <select id="namespaceFilter" onchange="loadApplications()">
+                    <option value="all">All Namespaces</option>
+                    <option value="default">default</option>
+                </select>
+                <button class="btn btn-secondary" onclick="loadApplications()">&#128260; Refresh</button>
+            </div>
+
+            <div id="appsContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading applications...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal-overlay" id="logsModal">
+        <div class="modal">
+            <h2>&#128220; Application Logs</h2>
+            <div class="logs-container" id="logsContent">Loading logs...</div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeLogsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <h2>&#9888; Delete Application</h2>
+            <p>Are you sure you want to delete <strong id="deleteAppName"></strong>?</p>
+            <p style="color: var(--gray-500); margin-top: 8px;">This will remove the deployment, service, and all associated resources.</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert-container" id="alertContainer"></div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let appToDelete = null;
+
+        async function loadNamespaces() {
+            try {
+                const response = await fetch(`${API_BASE}/api/namespaces`);
+                const data = await response.json();
+
+                const select = document.getElementById('namespaceFilter');
+                const currentValue = select.value;
+
+                // Keep "All Namespaces" option
+                select.innerHTML = '<option value="all">All Namespaces</option>';
+
+                data.namespaces.forEach(ns => {
+                    const option = document.createElement('option');
+                    option.value = ns;
+                    option.textContent = ns;
+                    select.appendChild(option);
+                });
+
+                select.value = currentValue || 'all';
+            } catch (error) {
+                console.error('Failed to load namespaces:', error);
+            }
+        }
+
+        async function loadApplications() {
+            const namespace = document.getElementById('namespaceFilter').value;
+            const container = document.getElementById('appsContainer');
+
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading applications...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/applications?namespace=${namespace}`);
+                const data = await response.json();
+
+                if (data.applications && data.applications.length > 0) {
+                    container.innerHTML = `<div class="apps-grid">${data.applications.map(app => renderAppCard(app)).join('')}</div>`;
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">&#128230;</div>
+                            <h3>No applications deployed</h3>
+                            <p>Deploy your first application to get started</p>
+                            <a href="/" class="btn" style="margin-top: 16px;">&#10133; Deploy Application</a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#9888;</div>
+                        <h3>Failed to load applications</h3>
+                        <p>${error.message}</p>
+                        <button class="btn" onclick="loadApplications()" style="margin-top: 16px;">Try Again</button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderAppCard(app) {
+            const isRunning = app.ready_replicas === app.replicas && app.ready_replicas > 0;
+            const isPending = app.ready_replicas < app.replicas;
+            const statusClass = isRunning ? 'running' : isPending ? 'pending' : 'failed';
+            const statusText = isRunning ? 'Running' : isPending ? 'Starting' : 'Not Ready';
+
+            const created = new Date(app.created).toLocaleDateString();
+
+            return `
+                <div class="app-card">
+                    <div class="app-header">
+                        <div class="app-icon">&#128230;</div>
+                        <div class="app-title">
+                            <h3>${app.name}</h3>
+                            <p>${app.namespace}</p>
+                        </div>
+                        <div class="app-status ${statusClass}">
+                            <span class="status-dot"></span>
+                            ${statusText}
+                        </div>
+                    </div>
+                    <div class="app-meta">
+                        <div class="meta-item">
+                            <label>Replicas</label>
+                            <span>${app.ready_replicas || 0}/${app.replicas}</span>
+                        </div>
+                        <div class="meta-item">
+                            <label>Created</label>
+                            <span>${created}</span>
+                        </div>
+                    </div>
+                    <div class="app-actions">
+                        <a href="https://${app.name}.siab.local" target="_blank" class="btn btn-sm">&#128279; Open</a>
+                        <button class="btn btn-sm btn-secondary" onclick="viewLogs('${app.name}', '${app.namespace}')">&#128220; Logs</button>
+                        <button class="btn btn-sm btn-danger" onclick="showDeleteModal('${app.name}', '${app.namespace}')">&#128465; Delete</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function viewLogs(name, namespace) {
+            document.getElementById('logsModal').classList.add('visible');
+            document.getElementById('logsContent').textContent = 'Loading logs...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/applications/${name}/logs?namespace=${namespace}&tail=200`);
+                const data = await response.json();
+
+                document.getElementById('logsContent').textContent = data.logs || 'No logs available';
+            } catch (error) {
+                document.getElementById('logsContent').textContent = 'Failed to load logs: ' + error.message;
+            }
+        }
+
+        function closeLogsModal() {
+            document.getElementById('logsModal').classList.remove('visible');
+        }
+
+        function showDeleteModal(name, namespace) {
+            appToDelete = { name, namespace };
+            document.getElementById('deleteAppName').textContent = name;
+            document.getElementById('deleteModal').classList.add('visible');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('visible');
+            appToDelete = null;
+        }
+
+        async function confirmDelete() {
+            if (!appToDelete) return;
+
+            const btn = document.getElementById('confirmDeleteBtn');
+            btn.disabled = true;
+            btn.textContent = 'Deleting...';
+
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/applications/${appToDelete.name}?namespace=${appToDelete.namespace}`,
+                    { method: 'DELETE' }
+                );
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('Application deleted successfully', 'success');
+                    loadApplications();
+                } else {
+                    showAlert(data.error || 'Failed to delete application', 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                closeDeleteModal();
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `<span>${message}</span>`;
+            container.appendChild(alert);
+            setTimeout(() => alert.remove(), 4000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadNamespaces();
+            loadApplications();
+        });
+
+        // Close modals on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('visible');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
