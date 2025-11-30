@@ -623,16 +623,16 @@ setup_directories() {
 clone_siab_repo() {
     log_step "Fetching SIAB repository..."
 
-    local SIAB_REPO_URL="https://github.com/morbidsteve/SIAB.git"
-    local SIAB_REPO_DIR="${SIAB_DIR}/repo"
+    local siab_repo_url="https://github.com/morbidsteve/SIAB.git"
 
     # Check if we're already running from a cloned repo
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ -f "${script_dir}/siab-status.sh" ]] && [[ -d "${script_dir}/crds" ]]; then
         log_info "Running from existing repo clone, using local files..."
+        # Update the GLOBAL variable (not local)
         SIAB_REPO_DIR="${script_dir}"
     else
-        # Need to clone the repo
+        # Need to clone the repo - SIAB_REPO_DIR is already set globally to /opt/siab/repo
         if [[ -d "${SIAB_REPO_DIR}/.git" ]]; then
             log_info "Updating existing SIAB repository..."
             cd "${SIAB_REPO_DIR}"
@@ -641,11 +641,11 @@ clone_siab_repo() {
         else
             log_info "Cloning SIAB repository..."
             rm -rf "${SIAB_REPO_DIR}"
-            git clone --depth 1 "${SIAB_REPO_URL}" "${SIAB_REPO_DIR}"
+            git clone --depth 1 "${siab_repo_url}" "${SIAB_REPO_DIR}"
         fi
     fi
 
-    # Export the repo dir for other functions to use
+    # Export for subprocesses
     export SIAB_REPO_DIR
     log_info "SIAB repo available at: ${SIAB_REPO_DIR}"
 }
