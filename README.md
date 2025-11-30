@@ -67,18 +67,20 @@ After installation, you'll have a complete secure platform with:
 
 ### Getting Started
 - **[Getting Started Guide](./docs/GETTING-STARTED.md)** - Installation, first steps, verification
-- **[Application Deployment](./docs/APPLICATION-DEPLOYMENT.md)** - Deploy your first app with examples
-- **[Security Guide](./docs/SECURITY-GUIDE.md)** - Security features, best practices, hardening
+- **[Application Deployment Guide](./docs/APPLICATION-DEPLOYMENT-GUIDE.md)** - Deploy your first app with examples
+- **[Application Deployer](./docs/APPLICATION-DEPLOYER.md)** - Using the web-based app deployer
+- **[Security Guide](./SECURITY.md)** - Security features, best practices, hardening
 
 ### Advanced Topics
-- **[Advanced Configuration](./docs/ADVANCED-CONFIGURATION.md)** - Firewalld, HTTPS, tuning
-- **[Bare Metal Provisioning](./docs/BARE-METAL-PROVISIONING.md)** - PXE/MAAS automated deployment
-- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[HTTPS Configuration](./docs/HTTPS-CONFIGURATION.md)** - TLS certificates and HTTPS setup
+- **[Firewalld Configuration](./docs/FIREWALLD-CONFIGURATION.md)** - Firewall rules and CNI integration
+- **[Bare Metal Provisioning](./docs/bare-metal-provisioning.md)** - PXE/MAAS automated deployment
+- **[Improvements Roadmap](./docs/IMPROVEMENTS.md)** - Planned enhancements
 
 ### Quick References
 - **[Architecture Overview](#architecture)** - System architecture and components
 - **[Requirements](#requirements)** - Hardware, software, network requirements
-- **[Security Checklist](./docs/SECURITY-GUIDE.md#production-checklist)** - Production deployment checklist
+- **[Security Features](./SECURITY.md)** - Security features overview
 
 ## 🏗️ Architecture
 

@@ -455,7 +455,7 @@
             {
                 name: 'Kubernetes Dashboard',
                 description: 'Cluster Management UI',
-                url: `https://k8s-dashboard.${SIAB_DOMAIN}`,
+                url: `https://k8s-dashboard.${SIAB_DOMAIN}/#/workloads?namespace=kubernetes-dashboard`,
                 icon: '&#9096;',
                 iconClass: 'system',
                 roles: ['siab-admin', 'siab-operator']
@@ -550,9 +550,10 @@
             document.getElementById('userRole').textContent = formatRoles(userInfo.roles);
             document.getElementById('userAvatar').textContent = userInfo.name.charAt(0).toUpperCase();
 
-            // Check admin status
+            // Check admin/operator status - show system services for both roles
             const isAdmin = userRoles.includes('siab-admin') || userRoles.includes('admin');
-            if (isAdmin) {
+            const isOperator = userRoles.includes('siab-operator');
+            if (isAdmin || isOperator) {
                 document.body.classList.add('is-admin');
             }
 
