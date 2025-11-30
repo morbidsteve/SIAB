@@ -1,0 +1,234 @@
+---
+# SIAB Dashboard - Main user-facing dashboard
+# Uses nginx to serve static HTML with Keycloak authentication
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: siab-dashboard
+  labels:
+    istio-injection: enabled
+    app.kubernetes.io/name: siab-dashboard
+    app.kubernetes.io/part-of: siab
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: siab-dashboard-html
+  namespace: siab-dashboard
+data:
+  # The index.html content will be created from the dashboard/frontend/index.html
+  # This is a placeholder - the actual content is injected by install.sh
+  index.html: |
+    <!DOCTYPE html>
+    <html><head><title>SIAB Dashboard</title></head>
+    <body><h1>SIAB Dashboard Loading...</h1></body></html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: siab-dashboard-nginx
+  namespace: siab-dashboard
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        location /ready {
+            access_log off;
+            return 200 'Ready';
+            add_header Content-Type text/plain;
+        }
+
+        # Gzip compression
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+        gzip_min_length 1000;
+    }
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log notice;
+    pid /tmp/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log /var/log/nginx/access.log main;
+
+        sendfile on;
+        keepalive_timeout 65;
+
+        # Run as non-root
+        client_body_temp_path /tmp/client_temp;
+        proxy_temp_path /tmp/proxy_temp;
+        fastcgi_temp_path /tmp/fastcgi_temp;
+        uwsgi_temp_path /tmp/uwsgi_temp;
+        scgi_temp_path /tmp/scgi_temp;
+
+        include /etc/nginx/conf.d/*.conf;
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: siab-dashboard
+  namespace: siab-dashboard
+  labels:
+    app: siab-dashboard
+    app.kubernetes.io/name: siab-dashboard
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: siab-dashboard
+  template:
+    metadata:
+      labels:
+        app: siab-dashboard
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+          readOnly: true
+        - name: nginx-main-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: var-run
+          mountPath: /var/run
+        - name: var-cache
+          mountPath: /var/cache/nginx
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+      volumes:
+      - name: html
+        configMap:
+          name: siab-dashboard-html
+      - name: nginx-config
+        configMap:
+          name: siab-dashboard-nginx
+          items:
+          - key: default.conf
+            path: default.conf
+      - name: nginx-main-config
+        configMap:
+          name: siab-dashboard-nginx
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+      - name: tmp
+        emptyDir: {}
+      - name: var-run
+        emptyDir: {}
+      - name: var-cache
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: siab-dashboard
+  namespace: siab-dashboard
+  labels:
+    app: siab-dashboard
+spec:
+  selector:
+    app: siab-dashboard
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+    protocol: TCP
+---
+# VirtualService for dashboard.siab.local and siab.local
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: siab-dashboard
+  namespace: istio-system
+spec:
+  hosts:
+  - "dashboard.siab.local"
+  - "siab.local"
+  gateways:
+  - user-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: siab-dashboard.siab-dashboard.svc.cluster.local
+        port:
+          number: 80

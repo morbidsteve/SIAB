@@ -129,6 +129,11 @@ declare -a INSTALL_STEPS=(
 declare -A STEP_STATUS
 declare -A STEP_MESSAGE
 
+# Track if we've drawn the dashboard initially
+DASHBOARD_DRAWN=false
+DASHBOARD_LINES=0
+CURRENT_STEP_NAME=""
+
 # Initialize all steps as pending
 init_step_status() {
     for step in "${INSTALL_STEPS[@]}"; do
@@ -146,16 +151,17 @@ set_step_status() {
     STEP_MESSAGE["$step"]="$message"
 }
 
-# Print the full status dashboard
-print_status_dashboard() {
-    local current_step="${1:-}"
+# Calculate number of rows needed for dashboard
+get_dashboard_rows() {
+    local half=$((${#INSTALL_STEPS[@]} / 2 + ${#INSTALL_STEPS[@]} % 2))
+    echo $((half + 7))  # header (4) + rows + legend (2) + current action (1)
+}
 
-    echo ""
-    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║              SIAB Installation Progress                        ║${NC}"
-    echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
+# Draw the status dashboard (with in-place update support)
+draw_status_dashboard() {
+    local current_action="${1:-}"
 
+    # Calculate columns
     local col1_steps=()
     local col2_steps=()
     local half=$((${#INSTALL_STEPS[@]} / 2 + ${#INSTALL_STEPS[@]} % 2))
@@ -168,6 +174,18 @@ print_status_dashboard() {
         fi
     done
 
+    # If already drawn, move cursor up to redraw in place
+    if [[ "$DASHBOARD_DRAWN" == "true" ]]; then
+        # Move cursor up DASHBOARD_LINES lines and clear
+        printf "\033[%dA" "$DASHBOARD_LINES"
+    fi
+
+    # Draw header
+    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║               SIAB Installation Progress                           ║${NC}"
+    echo -e "${BOLD}╠════════════════════════════════════════════════════════════════════╣${NC}"
+
+    # Draw status rows
     for i in "${!col1_steps[@]}"; do
         local step1="${col1_steps[$i]}"
         local step2="${col2_steps[$i]:-}"
@@ -176,42 +194,55 @@ print_status_dashboard() {
         local status1="${STEP_STATUS[$step1]:-pending}"
         local symbol1 color1
         case "$status1" in
-            pending) symbol1="$SYMBOL_PENDING"; color1="$DIM" ;;
-            running) symbol1="$SYMBOL_RUNNING"; color1="$CYAN" ;;
-            done)    symbol1="$SYMBOL_DONE"; color1="$GREEN" ;;
-            skipped) symbol1="$SYMBOL_SKIP"; color1="$YELLOW" ;;
-            failed)  symbol1="$SYMBOL_FAIL"; color1="$RED" ;;
+            pending) symbol1="○"; color1="$DIM" ;;
+            running) symbol1="◐"; color1="$CYAN" ;;
+            done)    symbol1="●"; color1="$GREEN" ;;
+            skipped) symbol1="◌"; color1="$YELLOW" ;;
+            failed)  symbol1="✗"; color1="$RED" ;;
         esac
 
-        printf "  ${color1}%s %-28s${NC}" "$symbol1" "$step1"
-
         # Format step 2 if exists
+        local step2_output=""
         if [[ -n "$step2" ]]; then
             local status2="${STEP_STATUS[$step2]:-pending}"
             local symbol2 color2
             case "$status2" in
-                pending) symbol2="$SYMBOL_PENDING"; color2="$DIM" ;;
-                running) symbol2="$SYMBOL_RUNNING"; color2="$CYAN" ;;
-                done)    symbol2="$SYMBOL_DONE"; color2="$GREEN" ;;
-                skipped) symbol2="$SYMBOL_SKIP"; color2="$YELLOW" ;;
-                failed)  symbol2="$SYMBOL_FAIL"; color2="$RED" ;;
+                pending) symbol2="○"; color2="$DIM" ;;
+                running) symbol2="◐"; color2="$CYAN" ;;
+                done)    symbol2="●"; color2="$GREEN" ;;
+                skipped) symbol2="◌"; color2="$YELLOW" ;;
+                failed)  symbol2="✗"; color2="$RED" ;;
             esac
-            printf "  ${color2}%s %-28s${NC}" "$symbol2" "$step2"
+            step2_output=$(printf "${color2}%s %-24s${NC}" "$symbol2" "$step2")
         fi
-        echo ""
+
+        printf "║ ${color1}%s %-24s${NC}  %s %-6s║\n" "$symbol1" "$step1" "$step2_output" ""
     done
 
-    echo ""
-    echo -e "  ${DIM}Legend: ${SYMBOL_PENDING} Pending  ${SYMBOL_RUNNING} Running  ${SYMBOL_DONE} Done  ${SYMBOL_SKIP} Skipped  ${SYMBOL_FAIL} Failed${NC}"
-    echo ""
+    # Draw footer with current action
+    echo -e "╠════════════════════════════════════════════════════════════════════╣"
+    if [[ -n "$current_action" ]]; then
+        printf "║ ${CYAN}▶${NC} %-65s ║\n" "${current_action:0:65}"
+    else
+        printf "║ %-67s ║\n" ""
+    fi
+    echo -e "╚════════════════════════════════════════════════════════════════════╝"
+
+    DASHBOARD_DRAWN=true
+    DASHBOARD_LINES=$(get_dashboard_rows)
 }
 
-# Start a step (mark as running and print status)
+# Print the full status dashboard (called once at end for final display)
+print_status_dashboard() {
+    draw_status_dashboard "$CURRENT_STEP_NAME"
+}
+
+# Start a step (mark as running and update display)
 start_step() {
     local step="$1"
+    CURRENT_STEP_NAME="$step"
     set_step_status "$step" "running"
-    print_status_dashboard "$step"
-    log_step "Starting: $step..."
+    draw_status_dashboard "Installing: $step..."
 }
 
 # Complete a step
@@ -219,7 +250,7 @@ complete_step() {
     local step="$1"
     local message="${2:-}"
     set_step_status "$step" "done" "$message"
-    log_info "$step completed"
+    draw_status_dashboard "Completed: $step"
 }
 
 # Skip a step
@@ -227,7 +258,7 @@ skip_step() {
     local step="$1"
     local reason="${2:-Already configured}"
     set_step_status "$step" "skipped" "$reason"
-    log_info "$step skipped: $reason"
+    draw_status_dashboard "Skipped: $step ($reason)"
 }
 
 # Fail a step
@@ -235,24 +266,32 @@ fail_step() {
     local step="$1"
     local reason="${2:-Unknown error}"
     set_step_status "$step" "failed" "$reason"
+    draw_status_dashboard "FAILED: $step - $reason"
     log_error "$step failed: $reason"
 }
 
-# Logging functions
+# Logging functions - write to log file, not console (to preserve in-place display)
+SIAB_LOG_FILE="${SIAB_LOG_DIR:-/var/log/siab}/install.log"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$SIAB_LOG_FILE")" 2>/dev/null || true
+
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
+    # Also print errors to stderr so they're visible
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 log_step() {
-    echo -e "${BLUE}[STEP]${NC} $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
 }
 
 # Error handling
@@ -2576,18 +2615,57 @@ install_siab_crds() {
 install_dashboard() {
     start_step "SIAB Dashboard"
 
+    # Check if dashboard is already running
+    if kubectl get deployment siab-dashboard -n siab-dashboard -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+        skip_step "SIAB Dashboard" "Already installed and running"
+        return 0
+    fi
+
     log_step "Installing SIAB Dashboard..."
 
-    # Deploy dashboard from repo if available
-    if [[ -f "${SIAB_REPO_DIR}/manifests/apps/dashboard.yaml" ]]; then
-        # Check if the dashboard image exists before deploying
-        log_info "Deploying SIAB dashboard..."
-        kubectl apply -f "${SIAB_REPO_DIR}/manifests/apps/dashboard.yaml" 2>/dev/null || {
-            log_warn "Dashboard deployment skipped (image may not be available yet)"
-        }
+    # Create namespace
+    kubectl create namespace siab-dashboard 2>/dev/null || true
+    kubectl label namespace siab-dashboard istio-injection=enabled --overwrite
+
+    # Read the HTML content from the frontend
+    local html_content=""
+    if [[ -f "${SIAB_REPO_DIR}/dashboard/frontend/index.html" ]]; then
+        html_content=$(cat "${SIAB_REPO_DIR}/dashboard/frontend/index.html")
+        # Escape for YAML - replace domain placeholder
+        html_content=$(echo "$html_content" | sed "s/siab\.local/${SIAB_DOMAIN}/g")
     else
-        log_info "Dashboard manifest not found, skipping custom dashboard"
+        log_warn "Dashboard HTML not found, using placeholder"
+        html_content='<!DOCTYPE html><html><head><title>SIAB Dashboard</title></head><body><h1>SIAB Dashboard</h1><p>Welcome to SIAB!</p></body></html>'
     fi
+
+    # Create the ConfigMap with the actual HTML content
+    kubectl create configmap siab-dashboard-html \
+        --from-literal=index.html="$html_content" \
+        -n siab-dashboard \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    # Deploy dashboard manifests
+    if [[ -f "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" ]]; then
+        # Apply the manifest (skip the HTML configmap since we created it above)
+        sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" | \
+            grep -v "^  index.html:" | kubectl apply -f -
+        log_info "Dashboard manifests applied"
+    else
+        log_warn "Dashboard manifest not found at ${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml"
+    fi
+
+    # Wait for dashboard to be ready
+    log_info "Waiting for SIAB Dashboard to be ready..."
+    local max_wait=120
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl get deployment siab-dashboard -n siab-dashboard -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+            log_info "Dashboard is ready"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
 
     # Copy manifests to SIAB directory for reference
     if [[ -d "${SIAB_REPO_DIR}/manifests" ]]; then
@@ -3156,9 +3234,16 @@ print_completion() {
         user_gateway_ip="${user_gateway_ip:-$node_ip}"
     fi
 
-    # Get dashboard token
-    local dashboard_token
-    dashboard_token=$(kubectl get secret siab-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' 2>/dev/null | base64 -d)
+    # Get dashboard token - try multiple methods for compatibility
+    local dashboard_token=""
+
+    # Method 1: Try to get from the secret (older method)
+    dashboard_token=$(kubectl get secret siab-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+
+    # Method 2: If secret method failed, use kubectl create token (K8s 1.24+)
+    if [[ -z "$dashboard_token" ]] || [[ ${#dashboard_token} -lt 50 ]]; then
+        dashboard_token=$(kubectl create token siab-admin -n kubernetes-dashboard --duration=8760h 2>/dev/null || true)
+    fi
 
     echo ""
     echo "╔════════════════════════════════════════════════════════════════╗"
