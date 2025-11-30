@@ -78,35 +78,6 @@ spec:
       protocol: HTTP
     tls:
       httpsRedirect: true
----
-# SIAB Gateway - Additional gateway for user ingress with HTTPS redirect
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: siab-gateway
-  namespace: istio-system
-spec:
-  selector:
-    istio: ingress-user
-  servers:
-  # HTTPS server
-  - hosts:
-    - '*.siab.local'
-    - siab.local
-    port:
-      name: https
-      number: 443
-      protocol: HTTPS
-    tls:
-      credentialName: siab-gateway-cert
-      mode: SIMPLE
-  # HTTP server with redirect to HTTPS
-  - hosts:
-    - '*.siab.local'
-    - siab.local
-    port:
-      name: http
-      number: 80
-      protocol: HTTP
-    tls:
-      httpsRedirect: true
+# Note: siab-gateway was removed - it conflicted with user-gateway
+# Both used the same selector (istio: ingress-user) which caused routing issues
+# Use user-gateway for user-facing services and admin-gateway for admin services

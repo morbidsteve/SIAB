@@ -2919,37 +2919,9 @@ spec:
         - "*.apps.${SIAB_DOMAIN}"
 EOF
 
-        # Legacy gateway for backward compatibility (routes to user gateway by default)
-        cat <<EOF | kubectl apply -f -
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: siab-gateway
-  namespace: istio-system
-spec:
-  selector:
-    istio: ingress-user
-  servers:
-    - port:
-        number: 443
-        name: https
-        protocol: HTTPS
-      tls:
-        mode: SIMPLE
-        credentialName: siab-gateway-cert
-      hosts:
-        - "*.${SIAB_DOMAIN}"
-        - "${SIAB_DOMAIN}"
-    - port:
-        number: 80
-        name: http
-        protocol: HTTP
-      tls:
-        httpsRedirect: true
-      hosts:
-        - "*.${SIAB_DOMAIN}"
-        - "${SIAB_DOMAIN}"
-EOF
+        # Note: siab-gateway removed - it conflicts with user-gateway
+        # Both use the same selector (istio: ingress-user), causing routing issues
+        # Use user-gateway for user-facing services instead
     fi
 
     # Apply PeerAuthentication policies for ingress gateways
