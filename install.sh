@@ -1857,12 +1857,17 @@ configure_keycloak_realm() {
 
     log_step "Configuring Keycloak realm with users, roles, and clients..."
 
+    # Load credentials to get Keycloak admin password
+    source "${SIAB_CONFIG_DIR}/credentials.env"
+
     # Run the Keycloak configuration script
     if [[ -f "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh" ]]; then
         chmod +x "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
         SIAB_CONFIG_DIR="${SIAB_CONFIG_DIR}" \
         SIAB_DOMAIN="${SIAB_DOMAIN}" \
         KEYCLOAK_INTERNAL_URL="http://keycloak.keycloak.svc.cluster.local:80" \
+        KEYCLOAK_ADMIN_USER="${KEYCLOAK_ADMIN_USER}" \
+        KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}" \
         bash "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
     else
         log_warn "Keycloak configuration script not found at ${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"

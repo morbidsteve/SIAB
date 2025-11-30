@@ -4,6 +4,24 @@
 
 set -euo pipefail
 
+# Check for required dependencies
+check_dependencies() {
+    local missing=()
+    for cmd in curl jq openssl kubectl; do
+        if ! command -v "$cmd" &>/dev/null; then
+            missing+=("$cmd")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "\033[0;31m[ERROR]\033[0m Missing required dependencies: ${missing[*]}"
+        echo "Please install them before running this script."
+        exit 1
+    fi
+}
+
+check_dependencies
+
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://keycloak.siab.local}"
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-http://keycloak.keycloak.svc.cluster.local:80}"
@@ -517,9 +535,14 @@ EOF
 create_k8s_secrets() {
     log_step "Creating Kubernetes secrets for OAuth2 proxy..."
 
-    # Generate cookie secret
+    # Generate cookie secret (use python3 if available, otherwise openssl)
     local cookie_secret
-    cookie_secret=$(python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+    if command -v python3 &>/dev/null; then
+        cookie_secret=$(python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
+    else
+        # Fallback to openssl base64
+        cookie_secret=$(openssl rand -base64 32 | tr -d '\n')
+    fi
 
     # Create oauth2-proxy namespace if it doesn't exist
     kubectl create namespace oauth2-proxy 2>/dev/null || true
