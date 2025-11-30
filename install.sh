@@ -292,10 +292,15 @@ fail_step() {
 }
 
 # Logging functions - write to log file, not console (to preserve in-place display)
-SIAB_LOG_FILE="${SIAB_LOG_DIR:-/var/log/siab}/install.log"
+# Use timestamp in filename for each run
+SIAB_LOG_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
+SIAB_LOG_FILE="${SIAB_LOG_DIR:-/var/log/siab}/install-${SIAB_LOG_TIMESTAMP}.log"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$SIAB_LOG_FILE")" 2>/dev/null || true
+
+# Also create a symlink to the latest log for convenience
+ln -sf "install-${SIAB_LOG_TIMESTAMP}.log" "${SIAB_LOG_DIR:-/var/log/siab}/install-latest.log" 2>/dev/null || true
 
 log_info() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
@@ -1952,11 +1957,11 @@ configure_keycloak_realm() {
     # Run the Keycloak configuration script
     if [[ -f "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh" ]]; then
         chmod +x "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
-        SIAB_CONFIG_DIR="${SIAB_CONFIG_DIR}" \
-        SIAB_DOMAIN="${SIAB_DOMAIN}" \
-        KEYCLOAK_INTERNAL_URL="http://keycloak.keycloak.svc.cluster.local:80" \
-        KEYCLOAK_ADMIN_USER="${KEYCLOAK_ADMIN_USER}" \
-        KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}" \
+        # Export variables for the script (can't reassign readonly vars inline)
+        export SIAB_DOMAIN
+        export KEYCLOAK_INTERNAL_URL="http://keycloak.keycloak.svc.cluster.local:80"
+        export KEYCLOAK_ADMIN_USER
+        export KEYCLOAK_ADMIN_PASSWORD
         bash "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
     else
         log_warn "Keycloak configuration script not found at ${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"

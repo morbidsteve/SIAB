@@ -13,10 +13,14 @@ readonly SIAB_CONFIG_DIR="/etc/siab"
 readonly SIAB_LOG_DIR="/var/log/siab"
 readonly SIAB_BIN_DIR="/usr/local/bin"
 readonly BACKUP_DIR="/tmp/siab-backup-$(date +%Y%m%d-%H%M%S)"
-readonly UNINSTALL_LOG="${SIAB_LOG_DIR}/uninstall.log"
+UNINSTALL_LOG_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
+readonly UNINSTALL_LOG="${SIAB_LOG_DIR}/uninstall-${UNINSTALL_LOG_TIMESTAMP}.log"
 
 # Ensure log directory exists
 mkdir -p "$SIAB_LOG_DIR" 2>/dev/null || true
+
+# Also create a symlink to the latest log for convenience
+ln -sf "uninstall-${UNINSTALL_LOG_TIMESTAMP}.log" "${SIAB_LOG_DIR}/uninstall-latest.log" 2>/dev/null || true
 
 # Colors for output
 readonly RED='\033[0;31m'
