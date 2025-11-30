@@ -435,8 +435,6 @@ spec:
     fromHeaders:
     - name: Authorization
       prefix: "Bearer "
-    fromCookies:
-    - siab_token
 EOF
 
 echo -e "${GREEN}RequestAuthentication configured${NC}"

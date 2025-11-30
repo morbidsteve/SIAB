@@ -21,8 +21,7 @@ spec:
     fromHeaders:
     - name: Authorization
       prefix: "Bearer "
-    fromCookies:
-    - "siab_token"
+    # Note: fromCookies is not supported in Istio 1.20.x
 ---
 # AuthorizationPolicy to require valid JWT for deployed user apps
 # Denies requests without valid JWT tokens to protected apps

@@ -24,9 +24,52 @@ check_dependencies
 
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://keycloak.siab.local}"
-KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-http://keycloak.keycloak.svc.cluster.local:80}"
 REALM_NAME="siab"
 SIAB_DOMAIN="${SIAB_DOMAIN:-siab.local}"
+
+# Set up port-forward for Keycloak access from host
+# The internal URL only works from inside the cluster, so we use port-forwarding
+KEYCLOAK_PORT_FORWARD_PID=""
+KEYCLOAK_LOCAL_PORT=18080
+
+setup_keycloak_access() {
+    log_step "Setting up port-forward to Keycloak..."
+
+    # Kill any existing port-forward on this port
+    pkill -f "kubectl port-forward.*keycloak.*${KEYCLOAK_LOCAL_PORT}" 2>/dev/null || true
+    sleep 1
+
+    # Start port-forward in background
+    kubectl port-forward -n keycloak svc/keycloak ${KEYCLOAK_LOCAL_PORT}:80 >/dev/null 2>&1 &
+    KEYCLOAK_PORT_FORWARD_PID=$!
+
+    # Wait for port-forward to be ready
+    local attempts=0
+    while [[ $attempts -lt 30 ]]; do
+        if curl -sf "http://localhost:${KEYCLOAK_LOCAL_PORT}/health/ready" >/dev/null 2>&1; then
+            log_info "Port-forward established"
+            return 0
+        fi
+        attempts=$((attempts + 1))
+        sleep 1
+    done
+
+    log_error "Failed to establish port-forward to Keycloak"
+    return 1
+}
+
+cleanup_keycloak_access() {
+    if [[ -n "$KEYCLOAK_PORT_FORWARD_PID" ]]; then
+        kill "$KEYCLOAK_PORT_FORWARD_PID" 2>/dev/null || true
+    fi
+    pkill -f "kubectl port-forward.*keycloak.*${KEYCLOAK_LOCAL_PORT}" 2>/dev/null || true
+}
+
+# Trap to cleanup on exit
+trap cleanup_keycloak_access EXIT
+
+# Use localhost with port-forward instead of cluster-internal URL
+KEYCLOAK_INTERNAL_URL="http://localhost:${KEYCLOAK_LOCAL_PORT}"
 
 # Colors
 RED='\033[0;31m'
@@ -65,15 +108,17 @@ DEPLOYER_CLIENT_SECRET=$(openssl rand -base64 32 | tr -d '=+/' | head -c 32)
 # Default user password (user should change on first login)
 DEFAULT_USER_PASSWORD=$(openssl rand -base64 16 | tr -d '=+/' | head -c 16)
 
-# Wait for Keycloak to be ready
-wait_for_keycloak() {
-    log_step "Waiting for Keycloak to be ready..."
+# Wait for Keycloak pod to be ready in Kubernetes
+wait_for_keycloak_pod() {
+    log_step "Waiting for Keycloak pod to be ready..."
     local max_attempts=60
     local attempt=0
 
     while [[ $attempt -lt $max_attempts ]]; do
-        if curl -sf "${KEYCLOAK_INTERNAL_URL}/health/ready" >/dev/null 2>&1; then
-            log_info "Keycloak is ready"
+        local ready
+        ready=$(kubectl get pods -n keycloak -l app=keycloak -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+        if [[ "$ready" == "True" ]]; then
+            log_info "Keycloak pod is ready"
             return 0
         fi
         attempt=$((attempt + 1))
@@ -81,7 +126,7 @@ wait_for_keycloak() {
         sleep 5
     done
 
-    log_error "Keycloak did not become ready in time"
+    log_error "Keycloak pod did not become ready in time"
     return 1
 }
 
@@ -571,7 +616,11 @@ main() {
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    wait_for_keycloak
+    # Wait for Keycloak pod to be ready first
+    wait_for_keycloak_pod
+
+    # Set up port-forward to access Keycloak from host
+    setup_keycloak_access
 
     log_step "Authenticating with Keycloak..."
     local token
