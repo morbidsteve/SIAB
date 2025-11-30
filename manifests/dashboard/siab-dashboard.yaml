@@ -232,3 +232,31 @@ spec:
         host: siab-dashboard.siab-dashboard.svc.cluster.local
         port:
           number: 80
+---
+# NetworkPolicy for dashboard security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: siab-dashboard-netpol
+  namespace: siab-dashboard
+spec:
+  podSelector:
+    matchLabels:
+      app: siab-dashboard
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-system
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53

@@ -347,7 +347,7 @@ spec:
   hosts:
     - "deployer.siab.local"
   gateways:
-    - siab-gateway
+    - user-gateway
   http:
     - route:
         - destination:
@@ -374,7 +374,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              name: istio-system
+              kubernetes.io/metadata.name: istio-system
       ports:
         - protocol: TCP
           port: 8080

@@ -52,6 +52,11 @@ case "${OS_ID}" in
         ;;
 esac
 
+# Set non-interactive mode for Debian/Ubuntu systems globally
+if [[ "${OS_FAMILY}" == "debian" ]]; then
+    export DEBIAN_FRONTEND=noninteractive
+fi
+
 # Component versions (pinned for security)
 readonly RKE2_VERSION="${RKE2_VERSION:-v1.28.4+rke2r1}"
 readonly HELM_VERSION="${HELM_VERSION:-v3.13.3}"
@@ -122,6 +127,7 @@ declare -a INSTALL_STEPS=(
     "Security Policies"
     "SIAB CRDs"
     "SIAB Dashboard"
+    "SIAB Deployer"
     "Final Configuration"
 )
 
@@ -733,7 +739,10 @@ configure_firewall() {
             firewall-cmd --permanent --add-port=9345/tcp   # RKE2 supervisor API
             firewall-cmd --permanent --add-port=10250/tcp  # Kubelet metrics
             firewall-cmd --permanent --add-port=2379-2380/tcp   # etcd
-            firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services
+            firewall-cmd --permanent --add-port=30000-32767/tcp  # NodePort Services (TCP)
+            firewall-cmd --permanent --add-port=30000-32767/udp  # NodePort Services (UDP)
+            firewall-cmd --permanent --add-port=53/tcp     # DNS (CoreDNS)
+            firewall-cmd --permanent --add-port=53/udp     # DNS (CoreDNS)
 
             # Canal (Calico + Flannel) ports
             firewall-cmd --permanent --add-port=8472/udp   # Flannel VXLAN
@@ -772,7 +781,10 @@ configure_firewall() {
         ufw allow 10250/tcp   # Kubelet metrics
         ufw allow 2379/tcp    # etcd client
         ufw allow 2380/tcp    # etcd peer
-        ufw allow 30000:32767/tcp  # NodePort Services
+        ufw allow 30000:32767/tcp  # NodePort Services (TCP)
+        ufw allow 30000:32767/udp  # NodePort Services (UDP)
+        ufw allow 53/tcp      # DNS (CoreDNS)
+        ufw allow 53/udp      # DNS (CoreDNS)
 
         # Canal (Calico + Flannel) ports
         ufw allow 8472/udp    # Flannel VXLAN
@@ -2707,6 +2719,76 @@ install_dashboard() {
     log_info "Dashboard setup complete"
 }
 
+# Install SIAB Application Deployer
+install_deployer() {
+    start_step "SIAB Deployer"
+
+    # Check if deployer is already running
+    if kubectl get deployment app-deployer-frontend -n siab-deployer -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+        skip_step "SIAB Deployer" "Already installed and running"
+        return 0
+    fi
+
+    log_step "Installing SIAB Application Deployer..."
+
+    # Check if deployer deployment manifest exists
+    local deployer_manifest="${SIAB_REPO_DIR}/app-deployer/deploy/deployer-deployment.yaml"
+    if [[ ! -f "$deployer_manifest" ]]; then
+        log_warn "Deployer manifest not found at $deployer_manifest"
+        skip_step "SIAB Deployer" "Manifest not found"
+        return 0
+    fi
+
+    # Create namespace with istio injection
+    run_quiet_ok kubectl create namespace siab-deployer
+    run_quiet_ok kubectl label namespace siab-deployer istio-injection=enabled --overwrite
+
+    # Read and inject frontend HTML content if it exists
+    local frontend_html="${SIAB_REPO_DIR}/app-deployer/frontend/index.html"
+    if [[ -f "$frontend_html" ]]; then
+        local html_content
+        html_content=$(cat "$frontend_html" | sed "s/siab\.local/${SIAB_DOMAIN}/g")
+
+        # Create ConfigMap with the frontend HTML
+        kubectl create configmap app-deployer-frontend-html \
+            --from-literal=index.html="$html_content" \
+            -n siab-deployer \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
+    fi
+
+    # Read and inject apps.html if it exists
+    local apps_html="${SIAB_REPO_DIR}/app-deployer/frontend/apps.html"
+    if [[ -f "$apps_html" ]]; then
+        local apps_content
+        apps_content=$(cat "$apps_html" | sed "s/siab\.local/${SIAB_DOMAIN}/g")
+
+        kubectl create configmap app-deployer-frontend-apps \
+            --from-literal=apps.html="$apps_content" \
+            -n siab-deployer \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
+    fi
+
+    # Apply the deployer manifest with domain substitution
+    sed "s/siab\.local/${SIAB_DOMAIN}/g" "$deployer_manifest" | run_quiet kubectl apply -f -
+    log_info "Deployer manifests applied"
+
+    # Wait for deployer to be ready
+    log_info "Waiting for SIAB Deployer to be ready..."
+    local max_wait=180
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl get deployment app-deployer-frontend -n siab-deployer -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+            log_info "Deployer frontend is ready"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    complete_step "SIAB Deployer"
+    log_info "Deployer setup complete"
+}
+
 # Create Istio Gateways (Admin and User planes)
 create_istio_gateway() {
     start_step "Istio Gateways"
@@ -3463,6 +3545,7 @@ main() {
     apply_security_policies
     install_siab_crds
     install_dashboard
+    install_deployer
 
     # Final Configuration
     final_configuration
