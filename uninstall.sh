@@ -13,6 +13,10 @@ readonly SIAB_CONFIG_DIR="/etc/siab"
 readonly SIAB_LOG_DIR="/var/log/siab"
 readonly SIAB_BIN_DIR="/usr/local/bin"
 readonly BACKUP_DIR="/tmp/siab-backup-$(date +%Y%m%d-%H%M%S)"
+readonly UNINSTALL_LOG="${SIAB_LOG_DIR}/uninstall.log"
+
+# Ensure log directory exists
+mkdir -p "$SIAB_LOG_DIR" 2>/dev/null || true
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -23,26 +27,31 @@ readonly CYAN='\033[0;36m'
 readonly BOLD='\033[1m'
 readonly NC='\033[0m' # No Color
 
-# Logging functions
+# Logging functions - log to both console and file
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*" >> "$UNINSTALL_LOG" 2>/dev/null || true
 }
 
 log_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SUCCESS] $*" >> "$UNINSTALL_LOG" 2>/dev/null || true
 }
 
 log_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARNING] $*" >> "$UNINSTALL_LOG" 2>/dev/null || true
 }
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $*"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" >> "$UNINSTALL_LOG" 2>/dev/null || true
 }
 
 log_step() {
     echo ""
     echo -e "${CYAN}${BOLD}==>${NC} ${BOLD}$*${NC}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] $*" >> "$UNINSTALL_LOG" 2>/dev/null || true
 }
 
 # Detect OS

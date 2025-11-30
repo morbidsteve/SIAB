@@ -1265,6 +1265,14 @@ EOF
 
 # Generate secure credentials
 generate_credentials() {
+    # Check if credentials already exist
+    if [[ -f "${SIAB_CONFIG_DIR}/credentials.env" ]]; then
+        log_info "Credentials file already exists, preserving existing credentials"
+        # Source existing credentials so they're available for other steps
+        source "${SIAB_CONFIG_DIR}/credentials.env"
+        return 0
+    fi
+
     log_step "Generating secure credentials..."
 
     local keycloak_admin_password
