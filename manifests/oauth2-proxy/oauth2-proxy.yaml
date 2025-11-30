@@ -20,6 +20,7 @@ stringData:
   client-secret: "placeholder-replaced-by-configure-keycloak-script"
 ---
 # Cookie encryption secret - created by configure-keycloak.sh script
+# IMPORTANT: cookie_secret must be exactly 16, 24, or 32 bytes for AES
 apiVersion: v1
 kind: Secret
 metadata:
@@ -27,7 +28,8 @@ metadata:
   namespace: oauth2-proxy
 type: Opaque
 stringData:
-  cookie-secret: "placeholder-replaced-by-configure-keycloak-script"
+  # 32 hex chars = 32 ASCII bytes (will be replaced by configure-keycloak.sh)
+  cookie-secret: "0123456789abcdef0123456789abcdef"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -37,15 +39,21 @@ metadata:
 data:
   oauth2-proxy.cfg: |
     # OAuth2 Proxy Configuration for Keycloak OIDC
-    provider = "keycloak-oidc"
+    provider = "oidc"
     provider_display_name = "SIAB Login"
 
-    # Keycloak OIDC endpoints (using internal service URL)
+    # Skip OIDC auto-discovery since we can't resolve external DNS inside cluster
+    skip_oidc_discovery = true
+
+    # Keycloak OIDC endpoints (using internal service URLs)
+    # The issuer URL must match what Keycloak puts in tokens (external URL)
     oidc_issuer_url = "https://keycloak.siab.local/realms/siab"
+
+    # But actual endpoint calls use internal cluster URLs
     login_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/auth"
     redeem_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/token"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
     profile_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/userinfo"
-    validate_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/userinfo"
 
     # Client configuration
     client_id = "siab-oauth2-proxy"

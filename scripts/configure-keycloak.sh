@@ -580,14 +580,12 @@ EOF
 create_k8s_secrets() {
     log_step "Creating Kubernetes secrets for OAuth2 proxy..."
 
-    # Generate cookie secret (use python3 if available, otherwise openssl)
+    # Generate cookie secret - must be exactly 16, 24, or 32 bytes
+    # OAuth2 Proxy expects raw bytes, but we need to pass it as a string
+    # Using 32 hex characters = 16 bytes when decoded, or generate 32-char alphanumeric
     local cookie_secret
-    if command -v python3 &>/dev/null; then
-        cookie_secret=$(python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
-    else
-        # Fallback to openssl base64
-        cookie_secret=$(openssl rand -base64 32 | tr -d '\n')
-    fi
+    # Generate exactly 32 alphanumeric characters (32 bytes as ASCII)
+    cookie_secret=$(openssl rand -hex 16)  # 16 bytes = 32 hex chars = 32 ASCII bytes
 
     # Create oauth2-proxy namespace if it doesn't exist
     kubectl create namespace oauth2-proxy 2>/dev/null || true
