@@ -110,6 +110,9 @@ declare -a INSTALL_STEPS=(
     "Istio Service Mesh"
     "Istio Gateways"
     "Keycloak Identity"
+    "Keycloak Realm Setup"
+    "OAuth2 Proxy"
+    "SSO Configuration"
     "MinIO Storage"
     "Trivy Security Scanner"
     "OPA Gatekeeper"
@@ -1842,6 +1845,119 @@ EOF
     log_info "Keycloak installed"
 }
 
+# Configure Keycloak Realm with users, roles, groups, and clients
+configure_keycloak_realm() {
+    start_step "Keycloak Realm Setup"
+
+    # Check if realm already exists by testing for a client
+    if kubectl get secret oauth2-proxy-client -n oauth2-proxy -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d | grep -q "."; then
+        skip_step "Keycloak Realm Setup" "Already configured"
+        return 0
+    fi
+
+    log_step "Configuring Keycloak realm with users, roles, and clients..."
+
+    # Run the Keycloak configuration script
+    if [[ -f "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh" ]]; then
+        chmod +x "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
+        SIAB_CONFIG_DIR="${SIAB_CONFIG_DIR}" \
+        SIAB_DOMAIN="${SIAB_DOMAIN}" \
+        KEYCLOAK_INTERNAL_URL="http://keycloak.keycloak.svc.cluster.local:80" \
+        bash "${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
+    else
+        log_warn "Keycloak configuration script not found at ${SIAB_REPO_DIR}/scripts/configure-keycloak.sh"
+        log_warn "Please run it manually after installation"
+        skip_step "Keycloak Realm Setup" "Script not found"
+        return 0
+    fi
+
+    complete_step "Keycloak Realm Setup"
+    log_info "Keycloak realm configured with users and roles"
+}
+
+# Install OAuth2 Proxy for SSO enforcement
+install_oauth2_proxy() {
+    start_step "OAuth2 Proxy"
+
+    # Check if OAuth2 Proxy is already running
+    if kubectl get deployment oauth2-proxy -n oauth2-proxy -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+        skip_step "OAuth2 Proxy" "Already installed and running"
+        return 0
+    fi
+
+    log_step "Installing OAuth2 Proxy for SSO enforcement..."
+
+    # Create namespace
+    kubectl create namespace oauth2-proxy 2>/dev/null || true
+    kubectl label namespace oauth2-proxy istio-injection=enabled --overwrite
+
+    # Apply OAuth2 Proxy manifests (secrets should be created by configure-keycloak.sh)
+    if [[ -f "${SIAB_REPO_DIR}/manifests/oauth2-proxy/oauth2-proxy.yaml" ]]; then
+        # Replace domain placeholder
+        sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/oauth2-proxy/oauth2-proxy.yaml" | kubectl apply -f -
+    else
+        log_warn "OAuth2 Proxy manifest not found"
+        skip_step "OAuth2 Proxy" "Manifest not found"
+        return 0
+    fi
+
+    # Wait for OAuth2 Proxy to be ready
+    log_info "Waiting for OAuth2 Proxy to be ready..."
+    local max_wait=120
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        if kubectl get deployment oauth2-proxy -n oauth2-proxy -o jsonpath='{.status.availableReplicas}' 2>/dev/null | grep -q "[1-9]"; then
+            log_info "OAuth2 Proxy is ready"
+            break
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+    done
+
+    if [[ $elapsed -ge $max_wait ]]; then
+        log_warn "OAuth2 Proxy did not become ready in time (may still be starting)"
+    fi
+
+    # Add auth.siab.local to hosts configuration
+    local user_gateway_ip
+    user_gateway_ip=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+    if [[ -n "$user_gateway_ip" ]]; then
+        if ! grep -q "auth.${SIAB_DOMAIN}" /etc/hosts; then
+            echo "${user_gateway_ip} auth.${SIAB_DOMAIN}" >> /etc/hosts
+            log_info "Added auth.${SIAB_DOMAIN} to /etc/hosts"
+        fi
+    fi
+
+    complete_step "OAuth2 Proxy"
+    log_info "OAuth2 Proxy installed"
+}
+
+# Configure SSO enforcement for all applications
+configure_sso() {
+    start_step "SSO Configuration"
+
+    log_step "Configuring SSO enforcement policies..."
+
+    # Apply SSO enforcement policies
+    if [[ -f "${SIAB_REPO_DIR}/manifests/istio/auth/sso-enforcement.yaml" ]]; then
+        # Replace domain placeholder
+        sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/istio/auth/sso-enforcement.yaml" | kubectl apply -f -
+        log_info "SSO enforcement policies applied"
+    else
+        log_warn "SSO enforcement manifest not found"
+    fi
+
+    # Apply user-apps-auth if it exists
+    if [[ -f "${SIAB_REPO_DIR}/manifests/istio/auth/user-apps-auth.yaml" ]]; then
+        sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/istio/auth/user-apps-auth.yaml" | kubectl apply -f -
+        log_info "User apps auth policies applied"
+    fi
+
+    complete_step "SSO Configuration"
+    log_info "SSO configuration complete"
+}
+
 # Install MinIO
 install_minio() {
     start_step "MinIO Storage"
@@ -3082,6 +3198,21 @@ print_completion() {
     echo "  File: ${SIAB_CONFIG_DIR}/credentials.env"
     echo "  View: sudo cat ${SIAB_CONFIG_DIR}/credentials.env"
     echo ""
+    # Show SIAB user credentials if available
+    if [[ -f "${SIAB_CONFIG_DIR}/keycloak/default-user.env" ]]; then
+        source "${SIAB_CONFIG_DIR}/keycloak/default-user.env" 2>/dev/null || true
+        echo -e "${BLUE}▸ SIAB Login (Keycloak SSO)${NC}"
+        echo "  ─────────────────────────────────────────"
+        echo "  Username: ${DEFAULT_ADMIN_USER:-siab-admin}"
+        echo "  Password: ${DEFAULT_ADMIN_PASSWORD:-<check credentials file>}"
+        echo -e "  ${YELLOW}(Password must be changed on first login)${NC}"
+        echo ""
+        echo "  Roles available:"
+        echo "    - siab-admin    (Full administrative access)"
+        echo "    - siab-operator (Deploy and manage apps)"
+        echo "    - siab-user     (Use deployed apps)"
+        echo ""
+    fi
     if [[ -n "$dashboard_token" ]]; then
         echo -e "${BLUE}▸ Kubernetes Dashboard Token${NC}"
         echo "  ─────────────────────────────────────────"
@@ -3105,19 +3236,19 @@ print_completion() {
     echo "  ${admin_gateway_ip} keycloak.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} longhorn.${SIAB_DOMAIN}"
     echo ""
     echo "User Plane"
-    echo "  ${user_gateway_ip} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN} deployer.${SIAB_DOMAIN}"
+    echo "  ${user_gateway_ip} ${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} catalog.${SIAB_DOMAIN} deployer.${SIAB_DOMAIN} auth.${SIAB_DOMAIN}"
     echo ""
     echo -e "${GREEN}▸ Next Steps${NC}"
     echo "  ─────────────────────────────────────────"
     echo "  1. Add the /etc/hosts entries above to your client machine"
-    echo "  2. Run 'siab-info' to see credentials and access details"
-    echo "  3. Read the Getting Started guide: docs/GETTING-STARTED.md"
+    echo "  2. Access https://dashboard.${SIAB_DOMAIN} to login"
+    echo "  3. Change your password on first login (required)"
+    echo "  4. Create additional users in Keycloak as needed"
     echo ""
-    echo "  Initial setup tasks:"
-    echo "    - Log into Keycloak and create a realm for your apps"
-    echo "    - Log into MinIO and create storage buckets"
-    echo "    - Explore Grafana dashboards for monitoring"
-    echo "    - Deploy apps via https://catalog.${SIAB_DOMAIN}"
+    echo "  SSO is now enabled for all applications!"
+    echo "    - Dashboard:      https://dashboard.${SIAB_DOMAIN}"
+    echo "    - App Deployer:   https://deployer.${SIAB_DOMAIN}"
+    echo "    - Keycloak Admin: https://keycloak.${SIAB_DOMAIN}"
     echo ""
     echo "════════════════════════════════════════════════════════════════"
     echo "  Thank you for installing SIAB - Secure Infrastructure as a Box"
@@ -3198,6 +3329,9 @@ main() {
 
     # Applications
     install_keycloak
+    configure_keycloak_realm
+    install_oauth2_proxy
+    configure_sso
     install_minio
     install_trivy
     install_gatekeeper

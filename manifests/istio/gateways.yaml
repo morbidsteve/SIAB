@@ -54,6 +54,8 @@ spec:
     - siab.local
     - dashboard.siab.local
     - catalog.siab.local
+    - deployer.siab.local
+    - auth.siab.local
     - '*.apps.siab.local'
     port:
       name: https
@@ -67,6 +69,8 @@ spec:
     - siab.local
     - dashboard.siab.local
     - catalog.siab.local
+    - deployer.siab.local
+    - auth.siab.local
     - '*.apps.siab.local'
     port:
       name: http

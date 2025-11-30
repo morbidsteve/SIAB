@@ -1,6 +1,6 @@
 ---
-# OAuth2 Proxy for protecting user-deployed applications
-# This proxy handles Keycloak authentication and session management
+# OAuth2 Proxy for protecting SIAB applications with Keycloak SSO
+# Provides authentication enforcement for all user-deployed applications
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -8,6 +8,18 @@ metadata:
   labels:
     istio-injection: enabled
 ---
+# Client secret - created by configure-keycloak.sh script
+# This is a placeholder - the actual secret is created dynamically
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth2-proxy-client
+  namespace: oauth2-proxy
+type: Opaque
+stringData:
+  client-secret: "placeholder-replaced-by-configure-keycloak-script"
+---
+# Cookie encryption secret - created by configure-keycloak.sh script
 apiVersion: v1
 kind: Secret
 metadata:
@@ -15,8 +27,7 @@ metadata:
   namespace: oauth2-proxy
 type: Opaque
 stringData:
-  # Generate with: python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
-  cookie-secret: "CHANGEME_GENERATE_WITH_COMMAND_ABOVE"
+  cookie-secret: "placeholder-replaced-by-configure-keycloak-script"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -25,20 +36,23 @@ metadata:
   namespace: oauth2-proxy
 data:
   oauth2-proxy.cfg: |
-    # OAuth2 Proxy Configuration for Keycloak
+    # OAuth2 Proxy Configuration for Keycloak OIDC
     provider = "keycloak-oidc"
     provider_display_name = "SIAB Login"
 
-    # Keycloak OIDC endpoints
+    # Keycloak OIDC endpoints (using internal service URL)
     oidc_issuer_url = "https://keycloak.siab.local/realms/siab"
     login_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/auth"
-    redeem_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/token"
-    profile_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/userinfo"
-    validate_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/userinfo"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/token"
+    profile_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/userinfo"
+    validate_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/userinfo"
 
-    # Client configuration (create in Keycloak)
+    # Client configuration
     client_id = "siab-oauth2-proxy"
     # client_secret set via environment variable
+
+    # Redirect URL - this is where Keycloak sends users after login
+    redirect_url = "https://auth.siab.local/oauth2/callback"
 
     # Cookie configuration
     cookie_name = "_siab_oauth2"
@@ -46,26 +60,47 @@ data:
     cookie_domains = [".siab.local"]
     cookie_expire = "168h"
     cookie_refresh = "1h"
+    cookie_samesite = "lax"
 
     # Proxy behavior
     email_domains = ["*"]
     skip_provider_button = true
     reverse_proxy = true
+    real_client_ip_header = "X-Forwarded-For"
 
     # Headers to pass upstream
     pass_access_token = true
     pass_authorization_header = true
     set_authorization_header = true
     set_xauthrequest = true
+    pass_user_headers = true
 
-    # SSL verification for self-signed certs
+    # SSL verification for internal communication
     ssl_insecure_skip_verify = true
+
+    # Upstreams (use with ext_authz)
+    upstreams = ["static://200"]
+
+    # Skip authentication for these paths
+    skip_auth_routes = [
+      "^/health$",
+      "^/ping$",
+      "^/ready$",
+      "^/oauth2/"
+    ]
+
+    # Logging
+    standard_logging = true
+    auth_logging = true
+    request_logging = true
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: oauth2-proxy
   namespace: oauth2-proxy
+  labels:
+    app: oauth2-proxy
 spec:
   replicas: 2
   selector:
@@ -75,6 +110,8 @@ spec:
     metadata:
       labels:
         app: oauth2-proxy
+      annotations:
+        sidecar.istio.io/inject: "true"
     spec:
       containers:
       - name: oauth2-proxy
@@ -118,16 +155,28 @@ spec:
             port: 4180
           initialDelaySeconds: 10
           periodSeconds: 30
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 2000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
       volumes:
       - name: config
         configMap:
           name: oauth2-proxy-config
+      securityContext:
+        fsGroup: 2000
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: oauth2-proxy
   namespace: oauth2-proxy
+  labels:
+    app: oauth2-proxy
 spec:
   selector:
     app: oauth2-proxy
@@ -135,3 +184,36 @@ spec:
   - port: 80
     targetPort: 4180
     name: http
+---
+# Istio VirtualService for OAuth2 Proxy
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: oauth2-proxy
+  namespace: istio-system
+spec:
+  hosts:
+  - "auth.siab.local"
+  gateways:
+  - user-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: oauth2-proxy.oauth2-proxy.svc.cluster.local
+        port:
+          number: 80
+---
+# DestinationRule for OAuth2 Proxy
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: oauth2-proxy
+  namespace: istio-system
+spec:
+  host: oauth2-proxy.oauth2-proxy.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL

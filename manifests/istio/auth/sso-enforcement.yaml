@@ -1,0 +1,230 @@
+---
+# SIAB SSO Enforcement Policies
+# These policies enforce Keycloak authentication for all applications
+# Using Istio's ext_authz to validate requests through OAuth2 Proxy
+
+# =============================================================================
+# External Authorization Configuration
+# =============================================================================
+
+# Extension provider configuration is done via IstioOperator mesh config
+# This EnvoyFilter adds the ext_authz filter for OAuth2 Proxy
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: oauth2-proxy-ext-authz
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      istio: ingress-user
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.ext_authz
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+          grpc_service:
+            # Use HTTP service for OAuth2 Proxy
+            timeout: 10s
+          http_service:
+            server_uri:
+              uri: http://oauth2-proxy.oauth2-proxy.svc.cluster.local:80
+              cluster: outbound|80||oauth2-proxy.oauth2-proxy.svc.cluster.local
+              timeout: 10s
+            path_prefix: "/oauth2/auth"
+            authorization_request:
+              allowed_headers:
+                patterns:
+                - exact: "cookie"
+                - exact: "authorization"
+                - exact: "x-forwarded-for"
+                - exact: "x-forwarded-host"
+                - exact: "x-forwarded-proto"
+                - exact: "x-forwarded-uri"
+            authorization_response:
+              allowed_upstream_headers:
+                patterns:
+                - exact: "authorization"
+                - exact: "x-auth-request-user"
+                - exact: "x-auth-request-email"
+                - exact: "x-auth-request-groups"
+                - exact: "x-auth-request-access-token"
+          failure_mode_allow: false
+          status_on_error:
+            code: 503
+
+---
+# =============================================================================
+# Authorization Policies
+# =============================================================================
+
+# Allow access to OAuth2 Proxy endpoints without auth (for login flow)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-oauth2-endpoints
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "auth.siab.local"
+        - "auth.siab.local:*"
+---
+# Allow access to Keycloak (handles its own authentication)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-keycloak
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "keycloak.siab.local"
+        - "keycloak.siab.local:*"
+---
+# Allow access to SIAB Dashboard (has built-in Keycloak auth)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-siab-dashboard
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "siab.local"
+        - "siab.local:*"
+        - "dashboard.siab.local"
+        - "dashboard.siab.local:*"
+---
+# Allow access to App Deployer (has built-in Keycloak auth)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-deployer
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "deployer.siab.local"
+        - "deployer.siab.local:*"
+        - "catalog.siab.local"
+        - "catalog.siab.local:*"
+---
+# Allow access to Admin services (each has its own auth or Keycloak integration)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-admin-services
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "grafana.siab.local"
+        - "grafana.siab.local:*"
+        - "k8s-dashboard.siab.local"
+        - "k8s-dashboard.siab.local:*"
+        - "minio.siab.local"
+        - "minio.siab.local:*"
+        - "longhorn.siab.local"
+        - "longhorn.siab.local:*"
+
+---
+# =============================================================================
+# JWT Authentication Rules (validates tokens when present)
+# =============================================================================
+
+# RequestAuthentication for User Gateway
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-user-gateway
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  jwtRules:
+  - issuer: "https://keycloak.siab.local/realms/siab"
+    # Use internal cluster URL for JWKS to avoid external network issues
+    jwksUri: "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
+    audiences:
+    - "siab-dashboard"
+    - "siab-oauth2-proxy"
+    - "siab-apps"
+    - "account"
+    forwardOriginalToken: true
+    outputPayloadToHeader: x-jwt-payload
+    fromHeaders:
+    - name: Authorization
+      prefix: "Bearer "
+    - name: X-Auth-Request-Access-Token
+    fromCookies:
+    - "siab_token"
+    - "_siab_oauth2"
+---
+# RequestAuthentication for Admin Gateway
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: keycloak-jwt-admin-gateway
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-admin
+  jwtRules:
+  - issuer: "https://keycloak.siab.local/realms/siab"
+    jwksUri: "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
+    audiences:
+    - "siab-admin-services"
+    - "siab-dashboard"
+    - "account"
+    forwardOriginalToken: true
+    outputPayloadToHeader: x-jwt-payload
+    fromHeaders:
+    - name: Authorization
+      prefix: "Bearer "
+    fromCookies:
+    - "siab_token"
