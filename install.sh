@@ -154,7 +154,12 @@ set_step_status() {
 # Calculate number of rows needed for dashboard
 get_dashboard_rows() {
     local half=$((${#INSTALL_STEPS[@]} / 2 + ${#INSTALL_STEPS[@]} % 2))
-    echo $((half + 7))  # header (4) + rows + legend (2) + current action (1)
+    echo $((half + 5))  # header (3) + rows + footer (2)
+}
+
+# Clear line helper
+clear_line() {
+    printf "\033[2K\r"
 }
 
 # Draw the status dashboard (with in-place update support)
@@ -176,16 +181,18 @@ draw_status_dashboard() {
 
     # If already drawn, move cursor up to redraw in place
     if [[ "$DASHBOARD_DRAWN" == "true" ]]; then
-        # Move cursor up DASHBOARD_LINES lines and clear
         printf "\033[%dA" "$DASHBOARD_LINES"
     fi
 
-    # Draw header
-    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║               SIAB Installation Progress                           ║${NC}"
-    echo -e "${BOLD}╠════════════════════════════════════════════════════════════════════╣${NC}"
+    # Draw header - total width 70 chars inside box
+    clear_line
+    echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    clear_line
+    echo -e "${BOLD}║                    SIAB Installation Progress                        ║${NC}"
+    clear_line
+    echo -e "${BOLD}╠══════════════════════════════════════════════════════════════════════╣${NC}"
 
-    # Draw status rows
+    # Draw status rows - each column is 33 chars wide (symbol + space + 31 char name)
     for i in "${!col1_steps[@]}"; do
         local step1="${col1_steps[$i]}"
         local step2="${col2_steps[$i]:-}"
@@ -202,7 +209,7 @@ draw_status_dashboard() {
         esac
 
         # Format step 2 if exists
-        local step2_output=""
+        local col2_text=""
         if [[ -n "$step2" ]]; then
             local status2="${STEP_STATUS[$step2]:-pending}"
             local symbol2 color2
@@ -213,20 +220,26 @@ draw_status_dashboard() {
                 skipped) symbol2="◌"; color2="$YELLOW" ;;
                 failed)  symbol2="✗"; color2="$RED" ;;
             esac
-            step2_output=$(printf "${color2}%s %-24s${NC}" "$symbol2" "$step2")
+            col2_text="${color2}${symbol2} $(printf '%-22s' "$step2")${NC}"
+        else
+            col2_text="$(printf '%-24s' '')"
         fi
 
-        printf "║ ${color1}%s %-24s${NC}  %s %-6s║\n" "$symbol1" "$step1" "$step2_output" ""
+        clear_line
+        printf "║ ${color1}%s %-22s${NC}  │  %s ║\n" "$symbol1" "$step1" "$col2_text"
     done
 
     # Draw footer with current action
-    echo -e "╠════════════════════════════════════════════════════════════════════╣"
+    clear_line
+    echo -e "╠══════════════════════════════════════════════════════════════════════╣"
+    clear_line
     if [[ -n "$current_action" ]]; then
-        printf "║ ${CYAN}▶${NC} %-65s ║\n" "${current_action:0:65}"
+        printf "║ ${CYAN}▶${NC} %-68s ║\n" "${current_action:0:68}"
     else
-        printf "║ %-67s ║\n" ""
+        printf "║ %-70s ║\n" ""
     fi
-    echo -e "╚════════════════════════════════════════════════════════════════════╝"
+    clear_line
+    echo -e "╚══════════════════════════════════════════════════════════════════════╝"
 
     DASHBOARD_DRAWN=true
     DASHBOARD_LINES=$(get_dashboard_rows)
@@ -242,7 +255,10 @@ start_step() {
     local step="$1"
     CURRENT_STEP_NAME="$step"
     set_step_status "$step" "running"
+    # Restore output temporarily to draw dashboard, then suppress again
+    restore_output
     draw_status_dashboard "Installing: $step..."
+    suppress_output
 }
 
 # Complete a step
@@ -250,7 +266,9 @@ complete_step() {
     local step="$1"
     local message="${2:-}"
     set_step_status "$step" "done" "$message"
+    restore_output
     draw_status_dashboard "Completed: $step"
+    suppress_output
 }
 
 # Skip a step
@@ -258,7 +276,9 @@ skip_step() {
     local step="$1"
     local reason="${2:-Already configured}"
     set_step_status "$step" "skipped" "$reason"
+    restore_output
     draw_status_dashboard "Skipped: $step ($reason)"
+    suppress_output
 }
 
 # Fail a step
@@ -266,8 +286,10 @@ fail_step() {
     local step="$1"
     local reason="${2:-Unknown error}"
     set_step_status "$step" "failed" "$reason"
+    restore_output
     draw_status_dashboard "FAILED: $step - $reason"
     log_error "$step failed: $reason"
+    suppress_output
 }
 
 # Logging functions - write to log file, not console (to preserve in-place display)
@@ -286,16 +308,42 @@ log_warn() {
 
 log_error() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
-    # Also print errors to stderr so they're visible
-    echo -e "${RED}[ERROR]${NC} $1" >&2
+    # Also print errors to console so they're visible (use saved fd 4 for stderr)
+    echo -e "${RED}[ERROR]${NC} $1" >&4
 }
 
 log_step() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [STEP] $1" >> "$SIAB_LOG_FILE" 2>/dev/null || true
 }
 
+# Run a command silently, capturing output to log file
+# Usage: run_quiet command args...
+run_quiet() {
+    "$@" >> "$SIAB_LOG_FILE" 2>&1
+}
+
+# Run a command silently, ignoring errors
+# Usage: run_quiet_ok command args...
+run_quiet_ok() {
+    "$@" >> "$SIAB_LOG_FILE" 2>&1 || true
+}
+
+# Suppress all stdout/stderr temporarily (for cleaner display)
+# Save original file descriptors
+exec 3>&1 4>&2
+
+# Redirect all output to log file when in dashboard mode
+suppress_output() {
+    exec 1>>"$SIAB_LOG_FILE" 2>&1
+}
+
+# Restore output (for final messages, errors)
+restore_output() {
+    exec 1>&3 2>&4
+}
+
 # Error handling
-trap 'log_error "Installation failed at line $LINENO. Check ${SIAB_LOG_DIR}/install.log for details."' ERR
+trap 'restore_output; log_error "Installation failed at line $LINENO. Check ${SIAB_LOG_DIR}/install.log for details."' ERR
 
 # Initialize SIAB_REPO_DIR with a default value (will be updated by clone_siab_repo)
 SIAB_REPO_DIR="${SIAB_DIR}/repo"
@@ -2623,9 +2671,9 @@ install_dashboard() {
 
     log_step "Installing SIAB Dashboard..."
 
-    # Create namespace
-    kubectl create namespace siab-dashboard 2>/dev/null || true
-    kubectl label namespace siab-dashboard istio-injection=enabled --overwrite
+    # Create namespace (silently)
+    run_quiet_ok kubectl create namespace siab-dashboard
+    run_quiet_ok kubectl label namespace siab-dashboard istio-injection=enabled --overwrite
 
     # Read the HTML content from the frontend
     local html_content=""
@@ -2638,17 +2686,17 @@ install_dashboard() {
         html_content='<!DOCTYPE html><html><head><title>SIAB Dashboard</title></head><body><h1>SIAB Dashboard</h1><p>Welcome to SIAB!</p></body></html>'
     fi
 
-    # Create the ConfigMap with the actual HTML content
+    # Create the ConfigMap with the actual HTML content (silently)
     kubectl create configmap siab-dashboard-html \
         --from-literal=index.html="$html_content" \
         -n siab-dashboard \
-        --dry-run=client -o yaml | kubectl apply -f -
+        --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
 
     # Deploy dashboard manifests
     if [[ -f "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" ]]; then
         # Apply the manifest (skip the HTML configmap since we created it above)
         sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" | \
-            grep -v "^  index.html:" | kubectl apply -f -
+            grep -v "^  index.html:" | run_quiet kubectl apply -f -
         log_info "Dashboard manifests applied"
     else
         log_warn "Dashboard manifest not found at ${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml"
@@ -3362,8 +3410,10 @@ main() {
     check_root
     setup_directories
 
-    # Redirect all output to log file while still showing on console
-    exec > >(tee -a "${SIAB_LOG_DIR}/install.log") 2>&1
+    # Draw initial dashboard then suppress command output
+    # (dashboard functions will restore/suppress as needed)
+    draw_status_dashboard "Initializing..."
+    suppress_output
 
     # System Requirements check
     start_step "System Requirements"
@@ -3436,6 +3486,9 @@ main() {
 
     # Final Configuration
     final_configuration
+
+    # Restore output for final messages
+    restore_output
 
     # Print final status dashboard
     print_status_dashboard
