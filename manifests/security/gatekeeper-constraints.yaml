@@ -1,5 +1,6 @@
 ---
 # Constraint Template: Require non-root containers
+# Excludes Istio sidecar containers (istio-init, istio-proxy) which handle their own security
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
@@ -14,19 +15,25 @@ spec:
       rego: |
         package k8srequirenonroot
 
+        # Istio sidecar containers to exclude from this check
+        istio_containers := {"istio-init", "istio-proxy", "istio-validation"}
+
         violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
+          not istio_containers[container.name]
           not container.securityContext.runAsNonRoot
           msg := sprintf("Container %v must set securityContext.runAsNonRoot to true", [container.name])
         }
 
         violation[{"msg": msg}] {
           container := input.review.object.spec.initContainers[_]
+          not istio_containers[container.name]
           not container.securityContext.runAsNonRoot
           msg := sprintf("Init container %v must set securityContext.runAsNonRoot to true", [container.name])
         }
 ---
 # Constraint Template: Require resource limits
+# Excludes Istio sidecar containers which have their own resource configuration
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
@@ -41,14 +48,19 @@ spec:
       rego: |
         package k8srequireresourcelimits
 
+        # Istio sidecar containers to exclude from this check
+        istio_containers := {"istio-init", "istio-proxy", "istio-validation"}
+
         violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
+          not istio_containers[container.name]
           not container.resources.limits.cpu
           msg := sprintf("Container %v must specify cpu limits", [container.name])
         }
 
         violation[{"msg": msg}] {
           container := input.review.object.spec.containers[_]
+          not istio_containers[container.name]
           not container.resources.limits.memory
           msg := sprintf("Container %v must specify memory limits", [container.name])
         }
@@ -140,7 +152,7 @@ spec:
 apiVersion: templates.gatekeeper.sh/v1
 kind: ConstraintTemplate
 metadata:
-  name: k8srequireareadonlyrootfs
+  name: k8srequirereadonlyrootfs
 spec:
   crd:
     spec:
