@@ -86,6 +86,111 @@ def run_command(cmd, input_data=None):
         }
 
 
+def configure_firewalld_for_app(namespace, app_name):
+    """Configure firewalld rules to allow traffic to deployed application.
+
+    This ensures Istio can communicate with the deployed pods without
+    upstream connection errors.
+    """
+    try:
+        # Check if firewalld is running
+        firewalld_check = run_command("systemctl is-active firewalld")
+        if not firewalld_check['success'] or 'inactive' in firewalld_check['stdout']:
+            logger.info("Firewalld not active, skipping firewall configuration")
+            return True
+
+        # Get pod CIDR from cluster
+        pod_cidr_result = run_command(
+            "kubectl get nodes -o jsonpath='{.items[0].spec.podCIDR}'"
+        )
+        pod_cidr = pod_cidr_result['stdout'].strip() if pod_cidr_result['success'] else '10.42.0.0/16'
+
+        # Get service CIDR (default for RKE2)
+        service_cidr = '10.43.0.0/16'
+
+        # Ensure CNI interfaces are in trusted zone
+        cni_interfaces = ['cni0', 'flannel.1', 'vxlan.calico', 'cali+', 'tunl0', 'veth+']
+        for iface in cni_interfaces:
+            run_command(f"firewall-cmd --zone=trusted --add-interface={iface} --permanent 2>/dev/null || true")
+
+        # Add pod and service CIDRs as trusted sources
+        run_command(f"firewall-cmd --zone=trusted --add-source={pod_cidr} --permanent 2>/dev/null || true")
+        run_command(f"firewall-cmd --zone=trusted --add-source={service_cidr} --permanent 2>/dev/null || true")
+
+        # Enable masquerading for container networking
+        run_command("firewall-cmd --zone=public --add-masquerade --permanent 2>/dev/null || true")
+
+        # Allow traffic on common application ports
+        common_ports = ['80/tcp', '443/tcp', '8080/tcp', '8443/tcp', '3000/tcp', '9000/tcp']
+        for port in common_ports:
+            run_command(f"firewall-cmd --zone=public --add-port={port} --permanent 2>/dev/null || true")
+
+        # Reload firewalld to apply changes
+        run_command("firewall-cmd --reload")
+
+        logger.info(f"Firewalld configured for application {app_name} in namespace {namespace}")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to configure firewalld: {str(e)}")
+        return False
+
+
+def configure_istio_for_app(namespace, app_name, service_port):
+    """Configure Istio settings to ensure proper traffic flow to the application.
+
+    Creates DestinationRule and PeerAuthentication to prevent upstream errors.
+    """
+    try:
+        # Create DestinationRule with proper traffic policy
+        destination_rule = f"""
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {app_name}
+  namespace: {namespace}
+spec:
+  host: {app_name}.{namespace}.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        h2UpgradePolicy: UPGRADE
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+"""
+        run_command('kubectl apply -f -', input_data=destination_rule)
+
+        # Create PeerAuthentication to allow traffic
+        peer_auth = f"""
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: {app_name}
+  namespace: {namespace}
+spec:
+  selector:
+    matchLabels:
+      app: {app_name}
+  mtls:
+    mode: PERMISSIVE
+"""
+        run_command('kubectl apply -f -', input_data=peer_auth)
+
+        logger.info(f"Istio configured for {app_name}")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to configure Istio for {app_name}: {str(e)}")
+        return False
+
+
 def generate_deployment_id(name):
     """Generate unique deployment ID"""
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -990,6 +1095,15 @@ spec:
             paths: ["/*"]
 """
             run_command('kubectl apply -f -', input_data=auth_policy)
+
+        # Configure firewalld to allow traffic to the application
+        # This prevents upstream connection errors from Istio
+        configure_firewalld_for_app(namespace, name)
+
+        # Configure Istio DestinationRule and PeerAuthentication
+        # This ensures proper traffic flow without upstream errors
+        if integrations.get('istio', True):
+            configure_istio_for_app(namespace, name, service_port)
 
         # Generate and store credentials for apps that need them
         credentials_info = None

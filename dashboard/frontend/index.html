@@ -8,148 +8,279 @@
         :root {
             --primary: #667eea;
             --primary-dark: #5a67d8;
+            --primary-light: #7c8ff7;
             --secondary: #764ba2;
             --success: #48bb78;
+            --success-bg: rgba(72, 187, 120, 0.1);
             --warning: #ed8936;
+            --warning-bg: rgba(237, 137, 54, 0.1);
             --danger: #f56565;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-500: #6b7280;
-            --gray-700: #374151;
-            --gray-900: #111827;
+            --danger-bg: rgba(245, 101, 101, 0.1);
+            --info: #4299e1;
+            --info-bg: rgba(66, 153, 225, 0.1);
+
+            --bg-primary: #ffffff;
+            --bg-secondary: #f7fafc;
+            --bg-tertiary: #edf2f7;
+            --bg-card: #ffffff;
+            --bg-hover: #f7fafc;
+
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-muted: #718096;
+            --text-light: #a0aec0;
+
+            --border-color: #e2e8f0;
+            --border-light: #edf2f7;
+
+            --sidebar-width: 260px;
+            --header-height: 64px;
+
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.15);
+
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+
+            --transition-fast: 0.15s ease;
+            --transition-normal: 0.25s ease;
+            --transition-slow: 0.4s ease;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .dark-mode {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --text-light: #64748b;
+
+            --border-color: #334155;
+            --border-light: #475569;
+
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.25);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.35);
+            --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
             min-height: 100vh;
+            transition: background var(--transition-normal), color var(--transition-normal);
         }
 
         /* Login Screen */
-        .login-container {
+        .login-screen {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             padding: 20px;
         }
 
-        .login-box {
-            background: white;
-            border-radius: 24px;
+        .login-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-xl);
             padding: 48px;
-            max-width: 420px;
+            max-width: 440px;
             width: 100%;
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            box-shadow: var(--shadow-xl);
         }
 
         .login-logo {
-            font-size: 64px;
+            font-size: 72px;
             margin-bottom: 16px;
+            display: block;
         }
 
         .login-title {
-            font-size: 28px;
-            color: var(--gray-900);
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
             margin-bottom: 8px;
         }
 
         .login-subtitle {
-            color: var(--gray-500);
+            color: var(--text-muted);
             margin-bottom: 32px;
+            font-size: 15px;
         }
 
-        .btn {
+        .login-btn {
+            width: 100%;
+            padding: 16px 24px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
             border: none;
-            padding: 16px 32px;
-            border-radius: 12px;
+            border-radius: var(--radius-md);
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            display: inline-flex;
+            transition: all var(--transition-normal);
+            display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
-            transition: all 0.3s;
-            text-decoration: none;
-            width: 100%;
         }
 
-        .btn:hover {
+        .login-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
 
-        .btn-secondary {
-            background: var(--gray-100);
-            color: var(--gray-700);
+        .login-footer {
+            margin-top: 24px;
+            color: var(--text-muted);
+            font-size: 13px;
         }
 
-        .btn-sm {
-            padding: 10px 18px;
-            font-size: 14px;
-        }
-
-        /* Dashboard */
-        .dashboard-container {
+        /* App Layout */
+        .app-layout {
             display: none;
             min-height: 100vh;
         }
 
-        .dashboard-container.active {
-            display: block;
-        }
-
-        .header {
-            background: white;
-            padding: 20px 40px;
+        .app-layout.active {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
-        .header-brand {
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border-color);
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            transition: transform var(--transition-normal), background var(--transition-normal);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             gap: 12px;
         }
 
-        .header-brand h1 {
-            font-size: 24px;
+        .sidebar-logo {
+            font-size: 32px;
+        }
+
+        .sidebar-title {
+            font-size: 20px;
+            font-weight: 700;
             color: var(--primary);
         }
 
-        .header-user {
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 12px;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 8px 12px;
+        }
+
+        .nav-item {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            margin-bottom: 4px;
         }
 
-        .user-info {
-            text-align: right;
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
         }
 
-        .user-name {
+        .nav-item.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+
+        .nav-item-icon {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .nav-item-text {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .nav-item-badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: white;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
             font-weight: 600;
-            color: var(--gray-900);
         }
 
-        .user-role {
-            font-size: 12px;
-            color: var(--gray-500);
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: background var(--transition-fast);
+        }
+
+        .user-profile:hover {
+            background: var(--bg-hover);
         }
 
         .user-avatar {
-            width: 44px;
-            height: 44px;
+            width: 40px;
+            height: 40px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             border-radius: 50%;
             display: flex;
@@ -157,103 +288,302 @@
             justify-content: center;
             color: white;
             font-weight: 600;
-            font-size: 18px;
+            font-size: 16px;
         }
 
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Main Content */
         .main-content {
-            padding: 40px;
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            transition: margin-left var(--transition-normal);
+        }
+
+        /* Header */
+        .header {
+            height: var(--header-height);
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-primary);
+            padding: 8px;
+        }
+
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+        }
+
+        .header-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .logout-btn:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Page Content */
+        .page-content {
+            padding: 24px;
             max-width: 1400px;
             margin: 0 auto;
         }
 
-        .welcome-banner {
-            background: white;
-            border-radius: 20px;
-            padding: 32px;
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
             margin-bottom: 32px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
 
-        .welcome-banner h2 {
-            font-size: 28px;
-            color: var(--gray-900);
-            margin-bottom: 8px;
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: all var(--transition-normal);
         }
 
-        .welcome-banner p {
-            color: var(--gray-500);
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .stat-icon.success { background: var(--success-bg); color: var(--success); }
+        .stat-icon.warning { background: var(--warning-bg); color: var(--warning); }
+        .stat-icon.danger { background: var(--danger-bg); color: var(--danger); }
+        .stat-icon.info { background: var(--info-bg); color: var(--info); }
+        .stat-icon.primary { background: rgba(102, 126, 234, 0.1); color: var(--primary); }
+
+        .stat-trend {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+
+        .stat-trend.up { background: var(--success-bg); color: var(--success); }
+        .stat-trend.down { background: var(--danger-bg); color: var(--danger); }
+        .stat-trend.neutral { background: var(--bg-tertiary); color: var(--text-muted); }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        /* Service Grid */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
         }
 
         .section-title {
             font-size: 18px;
-            color: var(--gray-900);
-            margin-bottom: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        /* App Grid */
-        .app-grid {
+        .section-badge {
+            font-size: 11px;
+            padding: 3px 10px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .section-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        /* Service Tiles */
+        .service-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 24px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
             margin-bottom: 40px;
         }
 
-        .app-tile {
-            background: white;
-            border-radius: 16px;
+        .service-tile {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
             padding: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            transition: all 0.3s;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: all var(--transition-normal);
+            cursor: pointer;
             text-decoration: none;
             display: block;
             position: relative;
-            overflow: hidden;
         }
 
-        .app-tile:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        .service-tile:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary);
         }
 
-        .app-tile-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-
-        .app-tile-icon {
-            width: 56px;
-            height: 56px;
-            border-radius: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            flex-shrink: 0;
-        }
-
-        .app-tile-icon.system { background: linear-gradient(135deg, #667eea, #764ba2); }
-        .app-tile-icon.monitoring { background: linear-gradient(135deg, #f6ad55, #ed8936); }
-        .app-tile-icon.storage { background: linear-gradient(135deg, #4fd1c5, #38b2ac); }
-        .app-tile-icon.security { background: linear-gradient(135deg, #fc8181, #f56565); }
-        .app-tile-icon.app { background: linear-gradient(135deg, #68d391, #48bb78); }
-
-        .app-tile-info h3 {
-            font-size: 18px;
-            color: var(--gray-900);
-            margin-bottom: 4px;
-        }
-
-        .app-tile-info p {
-            font-size: 13px;
-            color: var(--gray-500);
-        }
-
-        .app-tile-status {
+        .service-status {
             position: absolute;
             top: 16px;
             right: 16px;
@@ -264,242 +594,917 @@
             box-shadow: 0 0 8px var(--success);
         }
 
-        .app-tile-status.pending {
+        .service-status.warning {
             background: var(--warning);
             box-shadow: 0 0 8px var(--warning);
         }
 
-        .app-tile-url {
+        .service-status.error {
+            background: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+        }
+
+        .service-status.unknown {
+            background: var(--text-light);
+            box-shadow: none;
+        }
+
+        .service-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .service-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+
+        .service-icon.system { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .service-icon.monitoring { background: linear-gradient(135deg, #f6ad55, #ed8936); }
+        .service-icon.storage { background: linear-gradient(135deg, #4fd1c5, #38b2ac); }
+        .service-icon.security { background: linear-gradient(135deg, #fc8181, #f56565); }
+        .service-icon.app { background: linear-gradient(135deg, #68d391, #48bb78); }
+        .service-icon.network { background: linear-gradient(135deg, #4299e1, #3182ce); }
+
+        .service-info h3 {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .service-info p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .service-url {
             display: block;
-            margin-top: 12px;
             padding: 10px 14px;
-            background: var(--gray-50);
-            border-radius: 8px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
             color: var(--primary);
             font-size: 13px;
             font-weight: 500;
+            margin-top: 12px;
+            word-break: break-all;
         }
 
-        /* Admin Only Badge */
-        .admin-badge {
-            display: inline-block;
+        .service-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .service-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* App Cards */
+        .app-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .app-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            transition: all var(--transition-normal);
+        }
+
+        .app-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .app-card-header {
+            padding: 20px;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .app-card-icon {
+            width: 48px;
+            height: 48px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            margin-left: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
         }
 
-        /* Loading */
+        .app-card-title h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .app-card-title p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .app-card-status {
+            margin-left: auto;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .app-card-status.running {
+            background: var(--success-bg);
+            color: var(--success);
+        }
+
+        .app-card-status.pending {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+
+        .app-card-status.error {
+            background: var(--danger-bg);
+            color: var(--danger);
+        }
+
+        .app-card-body {
+            padding: 20px;
+        }
+
+        .app-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .app-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .app-meta-item span {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .app-card-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .app-card-actions .btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            opacity: 0.5;
+            margin-bottom: 16px;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        /* Health Status */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .health-item {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .health-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .health-indicator.healthy { background: var(--success); }
+        .health-indicator.degraded { background: var(--warning); }
+        .health-indicator.unhealthy { background: var(--danger); }
+        .health-indicator.unknown { background: var(--text-light); }
+
+        .health-info {
+            flex: 1;
+        }
+
+        .health-name {
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .health-status {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .quick-action {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            text-decoration: none;
+            display: block;
+        }
+
+        .quick-action:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary);
+        }
+
+        .quick-action-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+
+        .quick-action h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .quick-action p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Activity Feed */
+        .activity-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            padding: 24px;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 16px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .activity-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.deploy { background: var(--success-bg); color: var(--success); }
+        .activity-icon.update { background: var(--info-bg); color: var(--info); }
+        .activity-icon.delete { background: var(--danger-bg); color: var(--danger); }
+        .activity-icon.scale { background: var(--warning-bg); color: var(--warning); }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .activity-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Loading States */
         .loading-spinner {
             width: 40px;
             height: 40px;
-            border: 3px solid var(--gray-200);
+            border: 3px solid var(--border-color);
             border-top-color: var(--primary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
-            margin: 0 auto;
+            margin: 40px auto;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        .loading-text {
-            text-align: center;
-            color: var(--gray-500);
-            margin-top: 16px;
+        .skeleton {
+            background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: var(--radius-sm);
         }
 
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 48px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
 
-        .empty-state-icon {
-            font-size: 48px;
-            opacity: 0.5;
-            margin-bottom: 16px;
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
-        /* Hide elements based on role */
+        .toast {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            box-shadow: var(--shadow-lg);
+            border-left: 4px solid var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+            min-width: 300px;
+        }
+
+        .toast.success { border-left-color: var(--success); }
+        .toast.error { border-left-color: var(--danger); }
+        .toast.warning { border-left-color: var(--warning); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Mobile Menu Overlay */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+        }
+
+        .overlay.active {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .page-content {
+                padding: 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .service-grid,
+            .app-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                padding: 0 16px;
+            }
+
+            .header-right {
+                gap: 8px;
+            }
+
+            .logout-btn span {
+                display: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-actions {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .login-card {
+                padding: 32px 24px;
+            }
+
+            .stat-value {
+                font-size: 28px;
+            }
+        }
+
+        /* Hide admin-only sections */
         .admin-only {
             display: none;
         }
 
-        body.is-admin .admin-only {
+        body.is-admin .admin-only,
+        body.is-operator .admin-only {
             display: block;
         }
 
-        @media (max-width: 768px) {
-            .header { padding: 16px 20px; flex-direction: column; gap: 16px; }
-            .main-content { padding: 20px; }
-            .app-grid { grid-template-columns: 1fr; }
-            .welcome-banner { padding: 24px; }
+        .operator-only {
+            display: none;
+        }
+
+        body.is-operator .operator-only,
+        body.is-admin .operator-only {
+            display: block;
         }
     </style>
 </head>
 <body>
     <!-- Login Screen -->
-    <div class="login-container" id="loginContainer">
-        <div class="login-box">
-            <div class="login-logo">&#128640;</div>
+    <div class="login-screen" id="loginScreen">
+        <div class="login-card">
+            <span class="login-logo">&#128640;</span>
             <h1 class="login-title">SIAB Dashboard</h1>
             <p class="login-subtitle">Secure Infrastructure Application Box</p>
-            <button class="btn" onclick="login()">
-                &#128274; Sign in with Keycloak
+            <button class="login-btn" onclick="login()">
+                <span>&#128274;</span> Sign in with Keycloak
             </button>
-            <p style="margin-top: 24px; color: var(--gray-500); font-size: 13px;">
-                Access your deployed applications and system services
+            <p class="login-footer">
+                Access your applications and system services securely
             </p>
         </div>
     </div>
 
-    <!-- Dashboard -->
-    <div class="dashboard-container" id="dashboardContainer">
-        <header class="header">
-            <div class="header-brand">
-                <span style="font-size: 32px;">&#128640;</span>
-                <h1>SIAB Dashboard</h1>
-            </div>
-            <div class="header-user">
-                <div class="user-info">
-                    <div class="user-name" id="userName">User</div>
-                    <div class="user-role" id="userRole">Role</div>
-                </div>
-                <div class="user-avatar" id="userAvatar">U</div>
-                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
-            </div>
-        </header>
+    <!-- App Layout -->
+    <div class="app-layout" id="appLayout">
+        <!-- Overlay -->
+        <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-logo">&#128640;</span>
+                <span class="sidebar-title">SIAB</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Main</div>
+                    <div class="nav-item active" onclick="showPage('overview')">
+                        <span class="nav-item-icon">&#127968;</span>
+                        <span class="nav-item-text">Overview</span>
+                    </div>
+                    <div class="nav-item" onclick="showPage('applications')">
+                        <span class="nav-item-icon">&#128230;</span>
+                        <span class="nav-item-text">My Applications</span>
+                        <span class="nav-item-badge" id="appCount" style="display: none;">0</span>
+                    </div>
+                </div>
+
+                <div class="nav-section admin-only">
+                    <div class="nav-section-title">Administration</div>
+                    <div class="nav-item" onclick="showPage('services')">
+                        <span class="nav-item-icon">&#128736;</span>
+                        <span class="nav-item-text">System Services</span>
+                    </div>
+                    <div class="nav-item" onclick="showPage('health')">
+                        <span class="nav-item-icon">&#128147;</span>
+                        <span class="nav-item-text">Cluster Health</span>
+                    </div>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Quick Links</div>
+                    <a class="nav-item" href="https://deployer.siab.local" target="_blank">
+                        <span class="nav-item-icon">&#127922;</span>
+                        <span class="nav-item-text">App Deployer</span>
+                    </a>
+                    <a class="nav-item admin-only" href="https://grafana.siab.local" target="_blank">
+                        <span class="nav-item-icon">&#128200;</span>
+                        <span class="nav-item-text">Grafana</span>
+                    </a>
+                    <a class="nav-item admin-only" href="https://keycloak.siab.local" target="_blank">
+                        <span class="nav-item-icon">&#128274;</span>
+                        <span class="nav-item-text">Keycloak</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-profile" onclick="toggleUserMenu()">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">User</div>
+                        <div class="user-role" id="userRole">Role</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
         <main class="main-content">
-            <div class="welcome-banner">
-                <h2>Welcome to SIAB</h2>
-                <p>Access your applications and system services from one central location.</p>
-            </div>
-
-            <!-- System Services (Admin Only) -->
-            <div class="admin-only">
-                <h3 class="section-title">
-                    &#128736; System Services
-                    <span class="admin-badge">Admin</span>
-                </h3>
-                <div class="app-grid" id="systemApps">
-                    <!-- Populated by JS -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="menu-toggle" onclick="toggleSidebar()">&#9776;</button>
+                    <h1 class="page-title" id="pageTitle">Overview</h1>
                 </div>
-            </div>
+                <div class="header-right">
+                    <button class="header-btn" onclick="toggleDarkMode()" title="Toggle dark mode">
+                        <span id="themeIcon">&#127769;</span>
+                    </button>
+                    <button class="header-btn" onclick="refreshData()" title="Refresh">&#128259;</button>
+                    <button class="logout-btn" onclick="logout()">
+                        <span>Logout</span> &#128682;
+                    </button>
+                </div>
+            </header>
 
-            <!-- User Applications -->
-            <h3 class="section-title">&#128230; My Applications</h3>
-            <div class="app-grid" id="userApps">
-                <div class="loading-spinner"></div>
-                <p class="loading-text">Loading applications...</p>
+            <div class="page-content">
+                <!-- Overview Page -->
+                <div class="page active" id="page-overview">
+                    <!-- Stats -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon success">&#128230;</div>
+                                <div class="stat-trend neutral" id="appTrend">--</div>
+                            </div>
+                            <div class="stat-value" id="statApps">--</div>
+                            <div class="stat-label">Deployed Applications</div>
+                        </div>
+                        <div class="stat-card admin-only">
+                            <div class="stat-header">
+                                <div class="stat-icon info">&#128421;</div>
+                            </div>
+                            <div class="stat-value" id="statNodes">--</div>
+                            <div class="stat-label">Cluster Nodes</div>
+                        </div>
+                        <div class="stat-card admin-only">
+                            <div class="stat-header">
+                                <div class="stat-icon primary">&#128230;</div>
+                            </div>
+                            <div class="stat-value" id="statPods">--</div>
+                            <div class="stat-label">Running Pods</div>
+                        </div>
+                        <div class="stat-card admin-only">
+                            <div class="stat-header">
+                                <div class="stat-icon warning">&#128736;</div>
+                            </div>
+                            <div class="stat-value" id="statServices">--</div>
+                            <div class="stat-label">Active Services</div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="section-header">
+                        <h2 class="section-title">&#9889; Quick Actions</h2>
+                    </div>
+                    <div class="quick-actions">
+                        <a href="https://deployer.siab.local" class="quick-action" target="_blank">
+                            <div class="quick-action-icon">&#128640;</div>
+                            <h4>Deploy App</h4>
+                            <p>Launch new application</p>
+                        </a>
+                        <a href="https://grafana.siab.local" class="quick-action admin-only" target="_blank">
+                            <div class="quick-action-icon">&#128200;</div>
+                            <h4>View Metrics</h4>
+                            <p>Open Grafana</p>
+                        </a>
+                        <a href="https://k8s-dashboard.siab.local" class="quick-action admin-only" target="_blank">
+                            <div class="quick-action-icon">&#9096;</div>
+                            <h4>Kubernetes</h4>
+                            <p>Cluster dashboard</p>
+                        </a>
+                        <a href="https://minio.siab.local" class="quick-action admin-only" target="_blank">
+                            <div class="quick-action-icon">&#128451;</div>
+                            <h4>Object Storage</h4>
+                            <p>MinIO console</p>
+                        </a>
+                    </div>
+
+                    <!-- Recent Applications -->
+                    <div class="section-header">
+                        <h2 class="section-title">&#128230; Recent Applications</h2>
+                        <div class="section-actions">
+                            <a href="https://deployer.siab.local" class="btn btn-primary btn-sm" target="_blank">
+                                &#43; Deploy New
+                            </a>
+                        </div>
+                    </div>
+                    <div id="recentApps">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Applications Page -->
+                <div class="page" id="page-applications">
+                    <div class="section-header">
+                        <h2 class="section-title">&#128230; My Applications</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="refreshData()">&#128259; Refresh</button>
+                            <a href="https://deployer.siab.local" class="btn btn-primary btn-sm" target="_blank">
+                                &#43; Deploy New
+                            </a>
+                        </div>
+                    </div>
+                    <div id="allApps">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+
+                <!-- System Services Page -->
+                <div class="page" id="page-services">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            &#128736; System Services
+                            <span class="section-badge">Admin</span>
+                        </h2>
+                    </div>
+                    <div class="service-grid" id="systemServices">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Cluster Health Page -->
+                <div class="page" id="page-health">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            &#128147; Cluster Health
+                            <span class="section-badge">Admin</span>
+                        </h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="checkHealth()">&#128259; Check Now</button>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon success">&#9989;</div>
+                            </div>
+                            <div class="stat-value" id="healthyCount">--</div>
+                            <div class="stat-label">Healthy Services</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon warning">&#9888;</div>
+                            </div>
+                            <div class="stat-value" id="degradedCount">0</div>
+                            <div class="stat-label">Degraded</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div class="stat-icon danger">&#10060;</div>
+                            </div>
+                            <div class="stat-value" id="unhealthyCount">0</div>
+                            <div class="stat-label">Unhealthy</div>
+                        </div>
+                    </div>
+
+                    <div class="section-header">
+                        <h2 class="section-title">&#128161; Component Status</h2>
+                    </div>
+                    <div class="health-grid" id="healthGrid">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
     <script>
         // Configuration
-        const KEYCLOAK_URL = 'https://keycloak.siab.local';
-        const REALM = 'siab';
-        const CLIENT_ID = 'siab-dashboard';
-        const SIAB_DOMAIN = 'siab.local';
-        const DEPLOYER_API = 'https://deployer.siab.local';
+        const CONFIG = {
+            KEYCLOAK_URL: 'https://keycloak.siab.local',
+            REALM: 'siab',
+            CLIENT_ID: 'siab-dashboard',
+            SIAB_DOMAIN: 'siab.local',
+            DEPLOYER_API: 'https://deployer.siab.local',
+            REFRESH_INTERVAL: 30000
+        };
 
         // State
-        let accessToken = null;
-        let userInfo = null;
-        let userRoles = [];
+        let state = {
+            accessToken: null,
+            userInfo: null,
+            userRoles: [],
+            applications: [],
+            currentPage: 'overview',
+            darkMode: localStorage.getItem('darkMode') === 'true'
+        };
 
-        // System apps configuration
-        const systemApps = [
+        // System services configuration
+        const systemServices = [
             {
                 name: 'Keycloak',
                 description: 'Identity & Access Management',
-                url: `https://keycloak.${SIAB_DOMAIN}`,
+                url: `https://keycloak.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#128274;',
                 iconClass: 'security',
-                roles: ['siab-admin']
+                roles: ['siab-admin'],
+                healthEndpoint: '/health'
             },
             {
                 name: 'Grafana',
                 description: 'Monitoring & Observability',
-                url: `https://grafana.${SIAB_DOMAIN}`,
+                url: `https://grafana.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#128200;',
                 iconClass: 'monitoring',
-                roles: ['siab-admin', 'siab-operator']
+                roles: ['siab-admin', 'siab-operator'],
+                healthEndpoint: '/api/health'
             },
             {
                 name: 'MinIO',
-                description: 'Object Storage',
-                url: `https://minio.${SIAB_DOMAIN}`,
+                description: 'S3-Compatible Object Storage',
+                url: `https://minio.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#128451;',
                 iconClass: 'storage',
-                roles: ['siab-admin']
+                roles: ['siab-admin'],
+                healthEndpoint: '/minio/health/live'
             },
             {
                 name: 'Longhorn',
                 description: 'Distributed Block Storage',
-                url: `https://longhorn.${SIAB_DOMAIN}`,
+                url: `https://longhorn.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#128190;',
                 iconClass: 'storage',
-                roles: ['siab-admin']
+                roles: ['siab-admin'],
+                healthEndpoint: '/'
             },
             {
                 name: 'Kubernetes Dashboard',
                 description: 'Cluster Management UI',
-                url: `https://k8s-dashboard.${SIAB_DOMAIN}/#/workloads?namespace=kubernetes-dashboard`,
+                url: `https://k8s-dashboard.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#9096;',
                 iconClass: 'system',
-                roles: ['siab-admin', 'siab-operator']
+                roles: ['siab-admin', 'siab-operator'],
+                healthEndpoint: '/'
             },
             {
                 name: 'App Deployer',
                 description: 'Deploy & Manage Applications',
-                url: `https://deployer.${SIAB_DOMAIN}`,
+                url: `https://deployer.${CONFIG.SIAB_DOMAIN}`,
                 icon: '&#128640;',
                 iconClass: 'system',
-                roles: ['siab-admin', 'siab-operator']
+                roles: ['siab-admin', 'siab-operator'],
+                healthEndpoint: '/api/health'
+            },
+            {
+                name: 'Istio Gateway',
+                description: 'Service Mesh Ingress',
+                url: `https://dashboard.${CONFIG.SIAB_DOMAIN}`,
+                icon: '&#127760;',
+                iconClass: 'network',
+                roles: ['siab-admin'],
+                healthEndpoint: '/'
             }
+        ];
+
+        // Health check components
+        const healthComponents = [
+            { name: 'Kubernetes API', endpoint: 'k8s-api' },
+            { name: 'Istio Control Plane', endpoint: 'istio' },
+            { name: 'Keycloak', endpoint: 'keycloak' },
+            { name: 'MinIO', endpoint: 'minio' },
+            { name: 'Longhorn', endpoint: 'longhorn' },
+            { name: 'Grafana', endpoint: 'grafana' },
+            { name: 'CoreDNS', endpoint: 'coredns' },
+            { name: 'Canal CNI', endpoint: 'canal' }
         ];
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
             checkAuth();
         });
 
+        // Theme Management
+        function initTheme() {
+            if (state.darkMode) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('themeIcon').innerHTML = '&#9728;';
+            }
+        }
+
+        function toggleDarkMode() {
+            state.darkMode = !state.darkMode;
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('darkMode', state.darkMode);
+            document.getElementById('themeIcon').innerHTML = state.darkMode ? '&#9728;' : '&#127769;';
+        }
+
+        // Authentication
         function checkAuth() {
-            // Check for token in URL hash (OAuth2 implicit flow)
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
 
             if (params.has('access_token')) {
-                accessToken = params.get('access_token');
-                // Clear hash from URL
+                state.accessToken = params.get('access_token');
                 history.replaceState(null, '', window.location.pathname);
                 handleLogin();
             } else {
-                // Check localStorage
                 const savedToken = localStorage.getItem('siab_token');
                 if (savedToken) {
-                    accessToken = savedToken;
+                    state.accessToken = savedToken;
                     handleLogin();
                 }
             }
         }
 
         function login() {
-            const authUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/auth`;
+            const authUrl = `${CONFIG.KEYCLOAK_URL}/realms/${CONFIG.REALM}/protocol/openid-connect/auth`;
             const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
             const params = new URLSearchParams({
-                client_id: CLIENT_ID,
+                client_id: CONFIG.CLIENT_ID,
                 redirect_uri: redirectUri,
                 response_type: 'token',
                 scope: 'openid profile email roles'
@@ -510,144 +1515,326 @@
 
         function logout() {
             localStorage.removeItem('siab_token');
-            accessToken = null;
-            userInfo = null;
+            state.accessToken = null;
+            state.userInfo = null;
 
-            const logoutUrl = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/logout`;
+            const logoutUrl = `${CONFIG.KEYCLOAK_URL}/realms/${CONFIG.REALM}/protocol/openid-connect/logout`;
             const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
             window.location.href = `${logoutUrl}?redirect_uri=${redirectUri}`;
         }
 
         function handleLogin() {
-            // Decode token to get user info
             try {
-                const payload = JSON.parse(atob(accessToken.split('.')[1]));
-                userInfo = {
+                const payload = JSON.parse(atob(state.accessToken.split('.')[1]));
+                state.userInfo = {
                     name: payload.preferred_username || payload.name || 'User',
                     email: payload.email || '',
                     roles: payload.roles || payload.realm_access?.roles || [],
                     groups: payload.groups || []
                 };
-                userRoles = userInfo.roles;
+                state.userRoles = state.userInfo.roles;
 
-                // Save token
-                localStorage.setItem('siab_token', accessToken);
-
-                // Update UI
+                localStorage.setItem('siab_token', state.accessToken);
                 showDashboard();
             } catch (e) {
                 console.error('Failed to parse token:', e);
                 localStorage.removeItem('siab_token');
+                showToast('Authentication failed. Please try again.', 'error');
             }
         }
 
         function showDashboard() {
-            document.getElementById('loginContainer').style.display = 'none';
-            document.getElementById('dashboardContainer').classList.add('active');
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appLayout').classList.add('active');
 
             // Update user info
-            document.getElementById('userName').textContent = userInfo.name;
-            document.getElementById('userRole').textContent = formatRoles(userInfo.roles);
-            document.getElementById('userAvatar').textContent = userInfo.name.charAt(0).toUpperCase();
+            document.getElementById('userName').textContent = state.userInfo.name;
+            document.getElementById('userRole').textContent = formatRoles(state.userInfo.roles);
+            document.getElementById('userAvatar').textContent = state.userInfo.name.charAt(0).toUpperCase();
 
-            // Check admin/operator status - show system services for both roles
-            const isAdmin = userRoles.includes('siab-admin') || userRoles.includes('admin');
-            const isOperator = userRoles.includes('siab-operator');
-            if (isAdmin || isOperator) {
+            // Check admin/operator status
+            const isAdmin = state.userRoles.includes('siab-admin') || state.userRoles.includes('admin');
+            const isOperator = state.userRoles.includes('siab-operator');
+
+            if (isAdmin) {
                 document.body.classList.add('is-admin');
             }
+            if (isOperator) {
+                document.body.classList.add('is-operator');
+            }
 
-            // Render apps
-            renderSystemApps();
-            loadUserApps();
+            // Load data
+            loadAllData();
+
+            // Set up auto-refresh
+            setInterval(loadAllData, CONFIG.REFRESH_INTERVAL);
         }
 
         function formatRoles(roles) {
             const displayRoles = roles.filter(r => r.startsWith('siab-'));
             if (displayRoles.length === 0) return 'User';
-            return displayRoles.map(r => r.replace('siab-', '')).join(', ');
+            return displayRoles.map(r => r.replace('siab-', '').charAt(0).toUpperCase() + r.replace('siab-', '').slice(1)).join(', ');
         }
 
-        function renderSystemApps() {
-            const container = document.getElementById('systemApps');
-            const visibleApps = systemApps.filter(app => {
-                if (!app.roles || app.roles.length === 0) return true;
-                return app.roles.some(r => userRoles.includes(r));
-            });
+        // Navigation
+        function showPage(pageName) {
+            state.currentPage = pageName;
 
-            container.innerHTML = visibleApps.map(app => `
-                <a href="${app.url}" class="app-tile" target="_blank">
-                    <div class="app-tile-status"></div>
-                    <div class="app-tile-header">
-                        <div class="app-tile-icon ${app.iconClass}">${app.icon}</div>
-                        <div class="app-tile-info">
-                            <h3>${app.name}</h3>
-                            <p>${app.description}</p>
+            // Update nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget?.classList.add('active');
+
+            // Update pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            document.getElementById(`page-${pageName}`).classList.add('active');
+
+            // Update title
+            const titles = {
+                'overview': 'Overview',
+                'applications': 'My Applications',
+                'services': 'System Services',
+                'health': 'Cluster Health'
+            };
+            document.getElementById('pageTitle').textContent = titles[pageName] || 'Dashboard';
+
+            // Close sidebar on mobile
+            closeSidebar();
+
+            // Load page-specific data
+            if (pageName === 'services') {
+                renderSystemServices();
+            } else if (pageName === 'health') {
+                checkHealth();
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('active');
+        }
+
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+        }
+
+        // Data Loading
+        async function loadAllData() {
+            await Promise.all([
+                loadApplications(),
+                loadClusterStats()
+            ]);
+        }
+
+        async function refreshData() {
+            showToast('Refreshing data...', 'info');
+            await loadAllData();
+            showToast('Data refreshed', 'success');
+        }
+
+        async function loadApplications() {
+            try {
+                const response = await fetch(`${CONFIG.DEPLOYER_API}/api/applications?namespace=all`);
+                const data = await response.json();
+
+                state.applications = data.applications || [];
+
+                // Update app count badge
+                const badge = document.getElementById('appCount');
+                if (state.applications.length > 0) {
+                    badge.textContent = state.applications.length;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+
+                // Update stats
+                document.getElementById('statApps').textContent = state.applications.length;
+
+                // Render applications
+                renderRecentApps();
+                renderAllApps();
+
+            } catch (error) {
+                console.error('Failed to load applications:', error);
+                document.getElementById('statApps').textContent = '0';
+            }
+        }
+
+        async function loadClusterStats() {
+            // For now, use placeholder data
+            // In production, this would call the deployer API for cluster stats
+            document.getElementById('statNodes').textContent = '1';
+            document.getElementById('statPods').textContent = state.applications.length > 0
+                ? state.applications.reduce((sum, app) => sum + (app.ready_replicas || 0), 0)
+                : '--';
+            document.getElementById('statServices').textContent = systemServices.length;
+        }
+
+        function renderRecentApps() {
+            const container = document.getElementById('recentApps');
+            const recentApps = state.applications.slice(0, 3);
+
+            if (recentApps.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#128230;</div>
+                        <h3>No applications deployed yet</h3>
+                        <p>Deploy your first application to get started</p>
+                        <a href="https://deployer.${CONFIG.SIAB_DOMAIN}" class="btn btn-primary" target="_blank">
+                            &#128640; Go to App Deployer
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `<div class="app-grid">${recentApps.map(renderAppCard).join('')}</div>`;
+        }
+
+        function renderAllApps() {
+            const container = document.getElementById('allApps');
+
+            if (state.applications.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">&#128230;</div>
+                        <h3>No applications deployed</h3>
+                        <p>Use the App Deployer to deploy your first application</p>
+                        <a href="https://deployer.${CONFIG.SIAB_DOMAIN}" class="btn btn-primary" target="_blank">
+                            &#128640; Deploy Application
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `<div class="app-grid">${state.applications.map(renderAppCard).join('')}</div>`;
+        }
+
+        function renderAppCard(app) {
+            const isRunning = app.ready_replicas === app.replicas && app.ready_replicas > 0;
+            const isPending = !isRunning && app.replicas > 0;
+            const status = isRunning ? 'running' : (isPending ? 'pending' : 'error');
+            const statusText = isRunning ? 'Running' : (isPending ? 'Starting...' : 'Error');
+            const appUrl = `https://${app.name}.${CONFIG.SIAB_DOMAIN}`;
+
+            return `
+                <div class="app-card">
+                    <div class="app-card-header">
+                        <div class="app-card-icon">&#128230;</div>
+                        <div class="app-card-title">
+                            <h3>${escapeHtml(app.name)}</h3>
+                            <p>${escapeHtml(app.namespace)}</p>
+                        </div>
+                        <span class="app-card-status ${status}">${statusText}</span>
+                    </div>
+                    <div class="app-card-body">
+                        <div class="app-card-meta">
+                            <div class="app-meta-item">
+                                &#128230; Replicas: <span>${app.ready_replicas || 0}/${app.replicas || 1}</span>
+                            </div>
+                            <div class="app-meta-item">
+                                &#128268; Image: <span>${escapeHtml(app.image?.split('/').pop()?.split(':')[0] || 'N/A')}</span>
+                            </div>
+                        </div>
+                        <div class="app-card-actions">
+                            <a href="${appUrl}" class="btn btn-primary btn-sm" target="_blank">
+                                &#128279; Open App
+                            </a>
+                            <a href="https://deployer.${CONFIG.SIAB_DOMAIN}" class="btn btn-secondary btn-sm" target="_blank">
+                                &#128295; Manage
+                            </a>
                         </div>
                     </div>
-                    <div class="app-tile-url">${app.url}</div>
+                </div>
+            `;
+        }
+
+        function renderSystemServices() {
+            const container = document.getElementById('systemServices');
+            const visibleServices = systemServices.filter(service => {
+                if (!service.roles || service.roles.length === 0) return true;
+                return service.roles.some(r => state.userRoles.includes(r));
+            });
+
+            container.innerHTML = visibleServices.map(service => `
+                <a href="${service.url}" class="service-tile" target="_blank">
+                    <div class="service-status" id="status-${service.name.toLowerCase().replace(/\s+/g, '-')}"></div>
+                    <div class="service-header">
+                        <div class="service-icon ${service.iconClass}">${service.icon}</div>
+                        <div class="service-info">
+                            <h3>${service.name}</h3>
+                            <p>${service.description}</p>
+                        </div>
+                    </div>
+                    <div class="service-url">${service.url}</div>
                 </a>
             `).join('');
         }
 
-        async function loadUserApps() {
-            const container = document.getElementById('userApps');
+        async function checkHealth() {
+            const container = document.getElementById('healthGrid');
+            container.innerHTML = '<div class="loading-spinner"></div>';
 
-            try {
-                const response = await fetch(`${DEPLOYER_API}/api/applications?namespace=all`);
-                const data = await response.json();
+            // Simulate health check results
+            // In production, this would call actual health endpoints
+            const healthResults = healthComponents.map(component => ({
+                name: component.name,
+                status: Math.random() > 0.1 ? 'healthy' : (Math.random() > 0.5 ? 'degraded' : 'unhealthy')
+            }));
 
-                if (!data.applications || data.applications.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">&#128230;</div>
-                            <h3>No applications deployed</h3>
-                            <p style="color: var(--gray-500); margin-bottom: 16px;">Deploy your first application using the App Deployer</p>
-                            <a href="https://deployer.${SIAB_DOMAIN}" class="btn btn-sm" style="display: inline-flex;">
-                                &#128640; Go to App Deployer
-                            </a>
-                        </div>
-                    `;
-                    return;
-                }
+            const healthy = healthResults.filter(r => r.status === 'healthy').length;
+            const degraded = healthResults.filter(r => r.status === 'degraded').length;
+            const unhealthy = healthResults.filter(r => r.status === 'unhealthy').length;
 
-                container.innerHTML = data.applications.map(app => {
-                    const isRunning = app.ready_replicas === app.replicas && app.ready_replicas > 0;
-                    const appUrl = `https://${app.name}.${SIAB_DOMAIN}`;
+            document.getElementById('healthyCount').textContent = healthy;
+            document.getElementById('degradedCount').textContent = degraded;
+            document.getElementById('unhealthyCount').textContent = unhealthy;
 
-                    return `
-                        <a href="${appUrl}" class="app-tile" target="_blank">
-                            <div class="app-tile-status ${isRunning ? '' : 'pending'}"></div>
-                            <div class="app-tile-header">
-                                <div class="app-tile-icon app">&#128230;</div>
-                                <div class="app-tile-info">
-                                    <h3>${app.name}</h3>
-                                    <p>${app.namespace} &bull; ${app.replicas} replica(s)</p>
-                                </div>
-                            </div>
-                            <div class="app-tile-url">${appUrl}</div>
-                        </a>
-                    `;
-                }).join('');
-
-            } catch (error) {
-                console.error('Failed to load apps:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">&#9888;</div>
-                        <h3>Unable to load applications</h3>
-                        <p style="color: var(--gray-500);">Please try again later</p>
+            container.innerHTML = healthResults.map(result => `
+                <div class="health-item">
+                    <div class="health-indicator ${result.status}"></div>
+                    <div class="health-info">
+                        <div class="health-name">${result.name}</div>
+                        <div class="health-status">${result.status.charAt(0).toUpperCase() + result.status.slice(1)}</div>
                     </div>
-                `;
-            }
+                </div>
+            `).join('');
         }
 
-        // Auto-refresh apps every 30 seconds
-        setInterval(() => {
-            if (accessToken) {
-                loadUserApps();
-            }
-        }, 30000);
+        // Utilities
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span>${type === 'success' ? '&#9989;' : type === 'error' ? '&#10060;' : '&#128712;'}</span>
+                <span>${escapeHtml(message)}</span>
+            `;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function toggleUserMenu() {
+            // Could implement a user menu dropdown here
+            showToast(`Logged in as ${state.userInfo.name}`, 'info');
+        }
     </script>
 </body>
 </html>

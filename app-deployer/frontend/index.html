@@ -6,27 +6,53 @@
     <title>SIAB Application Deployer</title>
     <style>
         :root {
-            --primary: #667eea;
-            --primary-dark: #5a67d8;
-            --secondary: #764ba2;
-            --success: #48bb78;
-            --warning: #ed8936;
-            --danger: #f56565;
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
             --gray-50: #f9fafb;
             --gray-100: #f3f4f6;
             --gray-200: #e5e7eb;
             --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
             --gray-500: #6b7280;
+            --gray-600: #4b5563;
             --gray-700: #374151;
+            --gray-800: #1f2937;
             --gray-900: #111827;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: var(--gray-900);
+            --text-muted: var(--gray-500);
+            --border: var(--gray-200);
+            --sidebar-bg: #ffffff;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --sidebar-bg: #1e293b;
+            --gray-50: #1e293b;
+            --gray-100: #334155;
+            --gray-200: #475569;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
+            line-height: 1.5;
         }
 
         .app-container {
@@ -34,45 +60,55 @@
             min-height: 100vh;
         }
 
-        /* Sidebar Navigation */
+        /* Sidebar */
         .sidebar {
             width: 280px;
-            background: white;
-            padding: 24px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+            transition: transform 0.3s ease;
         }
 
         .sidebar-header {
-            margin-bottom: 32px;
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
         }
 
         .sidebar-header h1 {
-            color: var(--primary);
-            font-size: 24px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .sidebar-header p {
-            color: var(--gray-500);
-            font-size: 13px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
             margin-top: 4px;
         }
 
         .nav-section {
-            margin-bottom: 24px;
+            padding: 16px;
+            flex: 1;
+            overflow-y: auto;
         }
 
         .nav-section-title {
-            color: var(--gray-500);
-            font-size: 11px;
+            color: var(--text-muted);
+            font-size: 0.75rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.05em;
             margin-bottom: 12px;
+            padding: 0 12px;
         }
 
         .nav-item {
@@ -81,7 +117,7 @@
             gap: 12px;
             padding: 12px 16px;
             border-radius: 10px;
-            color: var(--gray-700);
+            color: var(--text);
             text-decoration: none;
             font-weight: 500;
             cursor: pointer;
@@ -99,7 +135,7 @@
         }
 
         .nav-item-icon {
-            font-size: 20px;
+            font-size: 1.25rem;
             width: 24px;
             text-align: center;
         }
@@ -108,36 +144,52 @@
             margin-left: auto;
             background: var(--primary);
             color: white;
-            font-size: 11px;
+            font-size: 0.75rem;
             padding: 2px 8px;
             border-radius: 10px;
+            font-weight: 600;
         }
 
         .nav-item.active .nav-item-badge {
-            background: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.25);
         }
 
         .sidebar-footer {
-            margin-top: auto;
-            padding-top: 24px;
-            border-top: 1px solid var(--gray-200);
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: var(--gray-50);
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .theme-toggle span {
+            font-size: 0.875rem;
+            color: var(--text-muted);
         }
 
         /* Main Content */
         .main-content {
             flex: 1;
+            margin-left: 280px;
             padding: 24px;
-            overflow-y: auto;
+            min-height: 100vh;
         }
 
         .page {
             display: none;
             animation: fadeIn 0.3s ease;
+            max-width: 1400px;
+            margin: 0 auto;
         }
 
-        .page.active {
-            display: block;
-        }
+        .page.active { display: block; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -145,60 +197,115 @@
         }
 
         .page-header {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
 
         .page-header h2 {
-            color: var(--gray-900);
-            font-size: 24px;
-            margin-bottom: 8px;
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .page-header p {
-            color: var(--gray-500);
+            color: var(--text-muted);
+            margin-top: 4px;
         }
 
+        /* Cards */
         .card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 16px;
             padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
         }
 
-        .card h3 {
-            color: var(--gray-900);
-            font-size: 18px;
-            margin-bottom: 16px;
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-header h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .stat-icon.blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .stat-icon.green { background: linear-gradient(135deg, #10b981, #059669); }
+        .stat-icon.purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .stat-icon.orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .stat-info h4 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .stat-info p {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
         /* Apps Grid */
         .apps-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
             gap: 20px;
         }
 
         .app-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
             transition: all 0.3s;
             position: relative;
-            overflow: hidden;
         }
 
         .app-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary-light);
         }
 
         .app-card-header {
@@ -209,33 +316,30 @@
         }
 
         .app-icon {
-            width: 56px;
-            height: 56px;
+            width: 52px;
+            height: 52px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
-            border-radius: 14px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 28px;
+            font-size: 1.5rem;
             flex-shrink: 0;
         }
 
-        .app-info {
-            flex: 1;
-            min-width: 0;
-        }
+        .app-info { flex: 1; min-width: 0; }
 
         .app-name {
-            font-size: 18px;
+            font-size: 1.125rem;
             font-weight: 600;
-            color: var(--gray-900);
-            margin-bottom: 4px;
+            color: var(--text);
+            margin-bottom: 2px;
         }
 
         .app-namespace {
-            font-size: 13px;
-            color: var(--gray-500);
+            font-size: 0.875rem;
+            color: var(--text-muted);
         }
 
         .app-status {
@@ -244,24 +348,17 @@
             gap: 6px;
             padding: 4px 10px;
             border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
+            font-size: 0.75rem;
+            font-weight: 600;
         }
 
-        .app-status.running {
-            background: #dcfce7;
-            color: #166534;
-        }
+        .app-status.running { background: #dcfce7; color: #166534; }
+        .app-status.pending { background: #fef3c7; color: #92400e; }
+        .app-status.error { background: #fee2e2; color: #991b1b; }
 
-        .app-status.pending {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .app-status.error {
-            background: #fee2e2;
-            color: #991b1b;
-        }
+        [data-theme="dark"] .app-status.running { background: #065f46; color: #a7f3d0; }
+        [data-theme="dark"] .app-status.pending { background: #78350f; color: #fde68a; }
+        [data-theme="dark"] .app-status.error { background: #7f1d1d; color: #fecaca; }
 
         .status-dot {
             width: 8px;
@@ -278,36 +375,39 @@
             border-radius: 8px;
             color: var(--primary);
             text-decoration: none;
-            font-size: 13px;
+            font-size: 0.875rem;
             font-weight: 500;
             transition: all 0.2s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .app-url:hover {
-            background: var(--gray-100);
-        }
+        .app-url:hover { background: var(--gray-100); }
 
         .app-actions {
             display: flex;
             gap: 8px;
             margin-top: 16px;
             padding-top: 16px;
-            border-top: 1px solid var(--gray-100);
+            border-top: 1px solid var(--border);
         }
 
+        /* Buttons */
         .btn {
             background: var(--primary);
             color: white;
             border: none;
             padding: 10px 18px;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 10px;
+            font-size: 0.875rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            gap: 8px;
             text-decoration: none;
         }
 
@@ -316,37 +416,87 @@
             transform: translateY(-1px);
         }
 
-        .btn-sm {
-            padding: 8px 14px;
-            font-size: 12px;
-        }
-
-        .btn-secondary {
-            background: var(--gray-100);
-            color: var(--gray-700);
-        }
-
-        .btn-secondary:hover {
-            background: var(--gray-200);
-        }
-
-        .btn-success {
-            background: var(--success);
-        }
-
-        .btn-danger {
-            background: var(--danger);
-        }
-
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
 
-        /* Deploy Form */
+        .btn-sm { padding: 8px 14px; font-size: 0.8rem; }
+        .btn-lg { padding: 14px 24px; font-size: 1rem; }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-700); }
+        .btn-secondary:hover { background: var(--gray-200); }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: var(--danger); }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        .btn-outline:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.875rem;
+            margin-bottom: 8px;
+        }
+
+        .form-group label .required {
+            color: var(--danger);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.9375rem;
+            background: var(--card-bg);
+            color: var(--text);
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-group .help-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .form-row-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* Deploy Zone */
         .deploy-zone {
-            border: 3px dashed var(--gray-300);
+            border: 2px dashed var(--border);
             border-radius: 16px;
             padding: 48px;
             text-align: center;
@@ -355,35 +505,35 @@
             background: var(--gray-50);
         }
 
-        .deploy-zone:hover, .deploy-zone.dragover {
+        .deploy-zone:hover,
+        .deploy-zone.dragover {
             border-color: var(--primary);
-            background: #f0f4ff;
+            background: rgba(99, 102, 241, 0.05);
         }
 
         .deploy-zone.has-content {
             border-style: solid;
             border-color: var(--success);
-            background: #f0fff4;
+            background: rgba(16, 185, 129, 0.05);
         }
 
         .deploy-zone-icon {
-            font-size: 56px;
+            font-size: 3.5rem;
             margin-bottom: 16px;
         }
 
         .deploy-zone h3 {
-            color: var(--gray-700);
+            color: var(--text);
             margin-bottom: 8px;
+            font-size: 1.125rem;
         }
 
         .deploy-zone p {
-            color: var(--gray-500);
-            font-size: 14px;
+            color: var(--text-muted);
+            font-size: 0.9375rem;
         }
 
-        .deploy-zone input[type="file"] {
-            display: none;
-        }
+        .deploy-zone input[type="file"] { display: none; }
 
         .git-input-row {
             display: flex;
@@ -394,10 +544,11 @@
         .git-input-row input {
             flex: 1;
             padding: 14px 18px;
-            border: 2px solid var(--gray-200);
+            border: 2px solid var(--border);
             border-radius: 10px;
-            font-size: 14px;
-            transition: border-color 0.2s;
+            font-size: 0.9375rem;
+            background: var(--card-bg);
+            color: var(--text);
         }
 
         .git-input-row input:focus {
@@ -405,77 +556,7 @@
             border-color: var(--primary);
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            color: var(--gray-700);
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-
-        .form-group input, .form-group select, .form-group textarea {
-            width: 100%;
-            padding: 12px 14px;
-            border: 2px solid var(--gray-200);
-            border-radius: 10px;
-            font-size: 14px;
-            transition: border-color 0.2s;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .form-group .help-text {
-            font-size: 12px;
-            color: var(--gray-500);
-            margin-top: 6px;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        /* Detection Badge */
-        .detection-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 16px;
-            background: var(--gray-50);
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .detection-badge-icon {
-            width: 36px;
-            height: 36px;
-            background: var(--primary);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .detection-badge-info h4 {
-            font-size: 14px;
-            color: var(--gray-900);
-        }
-
-        .detection-badge-info p {
-            font-size: 12px;
-            color: var(--gray-500);
-        }
-
-        /* Toggle Switch */
+        /* Toggle Switches */
         .toggle-group {
             display: flex;
             flex-direction: column;
@@ -486,26 +567,34 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 16px;
+            padding: 14px 18px;
             background: var(--gray-50);
-            border-radius: 10px;
+            border-radius: 12px;
+            transition: all 0.2s;
+        }
+
+        .toggle-row:hover {
+            background: var(--gray-100);
         }
 
         .toggle-label span {
-            font-weight: 500;
-            color: var(--gray-700);
+            font-weight: 600;
+            color: var(--text);
+            font-size: 0.9375rem;
         }
 
         .toggle-label small {
             display: block;
-            color: var(--gray-500);
-            font-size: 12px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 2px;
         }
 
         .toggle {
             position: relative;
-            width: 48px;
-            height: 26px;
+            width: 52px;
+            height: 28px;
+            flex-shrink: 0;
         }
 
         .toggle input {
@@ -517,30 +606,183 @@
         .toggle-slider {
             position: absolute;
             cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background-color: var(--gray-300);
             transition: 0.3s;
-            border-radius: 26px;
+            border-radius: 28px;
         }
 
         .toggle-slider:before {
             position: absolute;
             content: "";
-            height: 20px;
-            width: 20px;
+            height: 22px;
+            width: 22px;
             left: 3px;
             bottom: 3px;
             background-color: white;
             transition: 0.3s;
             border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         .toggle input:checked + .toggle-slider {
-            background-color: var(--primary);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
         }
 
         .toggle input:checked + .toggle-slider:before {
-            transform: translateX(22px);
+            transform: translateX(24px);
+        }
+
+        /* Detection Badge */
+        .detection-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: var(--gray-50);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .detection-badge-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .detection-badge-info h4 {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .detection-badge-info p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--gray-100);
+            padding: 4px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text);
+        }
+
+        .tab.active {
+            background: var(--card-bg);
+            color: var(--primary);
+            box-shadow: var(--shadow);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Advanced Options */
+        .advanced-section {
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+
+        .advanced-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .advanced-toggle:hover {
+            color: var(--primary);
+        }
+
+        .advanced-content {
+            display: none;
+        }
+
+        .advanced-content.show {
+            display: block;
+        }
+
+        /* Env Vars Editor */
+        .env-editor {
+            background: var(--gray-50);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .env-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .env-row input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            background: var(--card-bg);
+            color: var(--text);
+        }
+
+        .env-row button {
+            padding: 10px;
+            background: var(--danger);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .add-env-btn {
+            padding: 10px 16px;
+            background: var(--gray-200);
+            color: var(--text);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         /* Alerts */
@@ -552,17 +794,19 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            max-width: 420px;
         }
 
         .alert {
             padding: 16px 20px;
             border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            box-shadow: var(--shadow-lg);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 12px;
             animation: slideInRight 0.3s ease;
-            min-width: 320px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
         }
 
         @keyframes slideInRight {
@@ -570,24 +814,41 @@
             to { opacity: 1; transform: translateX(0); }
         }
 
-        .alert-success { background: #f0fff4; border: 1px solid var(--success); color: #276749; }
-        .alert-error { background: #fff5f5; border: 1px solid var(--danger); color: #c53030; }
-        .alert-info { background: #ebf8ff; border: 1px solid #4299e1; color: #2b6cb0; }
-        .alert-warning { background: #fffbeb; border: 1px solid #f59e0b; color: #92400e; }
+        .alert-success { border-left: 4px solid var(--success); }
+        .alert-error { border-left: 4px solid var(--danger); }
+        .alert-info { border-left: 4px solid var(--primary); }
+        .alert-warning { border-left: 4px solid var(--warning); }
+
+        .alert-icon {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-content strong {
+            display: block;
+            margin-bottom: 2px;
+        }
 
         .alert-close {
-            margin-left: auto;
             background: none;
             border: none;
-            font-size: 18px;
+            font-size: 1.25rem;
             cursor: pointer;
-            opacity: 0.5;
+            color: var(--text-muted);
+            padding: 0;
         }
 
         /* Modal */
         .modal-overlay {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
@@ -596,6 +857,7 @@
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s;
+            backdrop-filter: blur(4px);
         }
 
         .modal-overlay.active {
@@ -604,13 +866,14 @@
         }
 
         .modal {
-            background: white;
-            border-radius: 16px;
+            background: var(--card-bg);
+            border-radius: 20px;
             padding: 32px;
             max-width: 500px;
             width: 90%;
             transform: scale(0.9);
             transition: transform 0.3s;
+            box-shadow: var(--shadow-lg);
         }
 
         .modal-overlay.active .modal {
@@ -618,39 +881,45 @@
         }
 
         .modal h3 {
-            margin-bottom: 16px;
-            color: var(--gray-900);
+            font-size: 1.25rem;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+
+        .modal p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
         }
 
         .modal-actions {
             display: flex;
             gap: 12px;
             justify-content: flex-end;
-            margin-top: 24px;
         }
 
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: var(--gray-500);
+            color: var(--text-muted);
         }
 
         .empty-state-icon {
-            font-size: 64px;
+            font-size: 4rem;
             margin-bottom: 16px;
             opacity: 0.5;
         }
 
         .empty-state h3 {
-            color: var(--gray-700);
+            color: var(--text);
+            font-size: 1.25rem;
             margin-bottom: 8px;
         }
 
         /* Spinner */
         .spinner {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
             border: 2px solid rgba(255,255,255,0.3);
             border-top-color: white;
             border-radius: 50%;
@@ -661,53 +930,124 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Quick Stats */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
+        /* Quick Deploy Card */
+        .quick-deploy-card {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 16px;
+            padding: 24px;
             margin-bottom: 24px;
         }
 
-        .stat-card {
+        .quick-deploy-card h3 {
+            font-size: 1.125rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .quick-deploy-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .quick-deploy-row input {
+            flex: 1;
+            padding: 14px 18px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9375rem;
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+
+        .quick-deploy-row input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+
+        .quick-deploy-row .btn {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            color: var(--primary);
         }
 
-        .stat-card-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--gray-900);
+        .quick-deploy-row .btn:hover {
+            background: var(--gray-100);
         }
 
-        .stat-card-label {
-            font-size: 13px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-
-        .stat-card-icon {
-            float: right;
-            font-size: 24px;
-            opacity: 0.5;
+        /* Responsive */
+        .mobile-menu-btn {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 200;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
         }
 
         @media (max-width: 1024px) {
-            .app-container { flex-direction: column; }
-            .sidebar { width: 100%; }
-            .stats-row { grid-template-columns: repeat(2, 1fr); }
-            .form-row { grid-template-columns: 1fr; }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .mobile-menu-btn {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .form-row,
+            .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .apps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-deploy-row {
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .page-header h2 {
+                font-size: 1.5rem;
+            }
         }
     </style>
 </head>
 <body>
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">
+        <span>&#9776;</span> Menu
+    </button>
+
     <div class="app-container">
         <!-- Sidebar -->
-        <nav class="sidebar">
+        <nav class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h1>&#128640; SIAB</h1>
+                <h1>&#127968; SIAB</h1>
                 <p>Application Deployer</p>
             </div>
 
@@ -722,6 +1062,10 @@
                     <span class="nav-item-icon">&#128640;</span>
                     <span>Deploy New</span>
                 </div>
+                <div class="nav-item" onclick="showPage('quick', this)">
+                    <span class="nav-item-icon">&#9889;</span>
+                    <span>Quick Deploy</span>
+                </div>
             </div>
 
             <div class="nav-section">
@@ -729,6 +1073,10 @@
                 <a href="https://dashboard.siab.local" class="nav-item" target="_blank">
                     <span class="nav-item-icon">&#127968;</span>
                     <span>Dashboard</span>
+                </a>
+                <a href="https://catalog.siab.local" class="nav-item" target="_blank">
+                    <span class="nav-item-icon">&#128218;</span>
+                    <span>App Catalog</span>
                 </a>
                 <a href="https://grafana.siab.local" class="nav-item" target="_blank">
                     <span class="nav-item-icon">&#128200;</span>
@@ -741,10 +1089,13 @@
             </div>
 
             <div class="sidebar-footer">
-                <a href="https://github.com/morbidsteve/SIAB" class="nav-item" target="_blank">
-                    <span class="nav-item-icon">&#128736;</span>
-                    <span>Documentation</span>
-                </a>
+                <div class="theme-toggle" onclick="toggleTheme()">
+                    <span>&#127769; Dark Mode</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="themeToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </nav>
 
@@ -754,40 +1105,54 @@
             <div class="page active" id="page-apps">
                 <div class="page-header">
                     <h2>&#128230; My Applications</h2>
-                    <p>Manage your deployed applications</p>
+                    <p>Manage and monitor your deployed applications</p>
                 </div>
 
-                <div class="stats-row" id="statsRow">
+                <div class="stats-grid">
                     <div class="stat-card">
-                        <span class="stat-card-icon">&#128230;</span>
-                        <div class="stat-card-value" id="statTotal">0</div>
-                        <div class="stat-card-label">Total Apps</div>
+                        <div class="stat-icon blue">&#128230;</div>
+                        <div class="stat-info">
+                            <h4 id="statTotal">0</h4>
+                            <p>Total Apps</p>
+                        </div>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-card-icon">&#9989;</span>
-                        <div class="stat-card-value" id="statRunning">0</div>
-                        <div class="stat-card-label">Running</div>
+                        <div class="stat-icon green">&#9989;</div>
+                        <div class="stat-info">
+                            <h4 id="statRunning">0</h4>
+                            <p>Running</p>
+                        </div>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-card-icon">&#128736;</span>
-                        <div class="stat-card-value" id="statNamespaces">0</div>
-                        <div class="stat-card-label">Namespaces</div>
+                        <div class="stat-icon purple">&#128451;</div>
+                        <div class="stat-info">
+                            <h4 id="statNamespaces">0</h4>
+                            <p>Namespaces</p>
+                        </div>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-card-icon">&#128279;</span>
-                        <div class="stat-card-value" id="statEndpoints">0</div>
-                        <div class="stat-card-label">Endpoints</div>
+                        <div class="stat-icon orange">&#128279;</div>
+                        <div class="stat-info">
+                            <h4 id="statEndpoints">0</h4>
+                            <p>Endpoints</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="apps-grid" id="appsGrid">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">&#128230;</div>
-                        <h3>No applications deployed</h3>
-                        <p>Deploy your first application to get started</p>
-                        <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy', null)">
-                            &#128640; Deploy Now
-                        </button>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>&#128187; Deployed Applications</h3>
+                        <button class="btn btn-sm" onclick="loadApplications()">&#128260; Refresh</button>
+                    </div>
+                    <div class="apps-grid" id="appsGrid">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">&#128230;</div>
+                            <h3>No applications deployed</h3>
+                            <p>Deploy your first application to get started</p>
+                            <button class="btn" style="margin-top: 16px;" onclick="showPage('deploy', null)">
+                                &#128640; Deploy Now
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -800,7 +1165,9 @@
                 </div>
 
                 <div class="card">
-                    <h3>&#128421; Source</h3>
+                    <div class="card-header">
+                        <h3>&#128194; Source</h3>
+                    </div>
 
                     <div class="deploy-zone" id="deployZone" onclick="document.getElementById('fileInput').click()">
                         <input type="file" id="fileInput" accept=".yaml,.yml,.json,.dockerfile,Dockerfile,docker-compose.yml" onchange="handleFileUpload(event)">
@@ -810,16 +1177,18 @@
                     </div>
 
                     <div class="git-input-row">
-                        <input type="text" id="gitUrl" placeholder="https://github.com/user/repo" onkeypress="if(event.key==='Enter')loadFromGit()">
+                        <input type="text" id="gitUrl" placeholder="https://github.com/user/repo or raw file URL" onkeypress="if(event.key==='Enter')loadFromGit()">
                         <button class="btn" onclick="loadFromGit()">&#128279; Load from Git</button>
                     </div>
                 </div>
 
                 <div class="card" id="configCard" style="display: none;">
-                    <h3>&#9881; Configuration</h3>
+                    <div class="card-header">
+                        <h3>&#9881; Configuration</h3>
+                    </div>
 
                     <div id="detectionBadge" class="detection-badge" style="display: none;">
-                        <div class="detection-badge-icon">&#128230;</div>
+                        <div class="detection-badge-icon" id="detectionIcon">&#128230;</div>
                         <div class="detection-badge-info">
                             <h4 id="detectedType">Kubernetes Manifest</h4>
                             <p id="detectedDesc">Ready to deploy</p>
@@ -828,34 +1197,36 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="appName">Application Name *</label>
+                            <label for="appName">Application Name <span class="required">*</span></label>
                             <input type="text" id="appName" placeholder="my-app" pattern="[a-z0-9-]+" required>
                             <div class="help-text">Lowercase letters, numbers, and hyphens only</div>
                         </div>
                         <div class="form-group">
                             <label for="namespace">Namespace</label>
-                            <input type="text" id="namespace" value="default" placeholder="default">
+                            <select id="namespace">
+                                <option value="default">default</option>
+                            </select>
                         </div>
                     </div>
 
                     <div class="form-row">
                         <div class="form-group">
                             <label for="customHostname">Hostname</label>
-                            <input type="text" id="customHostname" placeholder="myapp.siab.local" readonly>
-                            <div class="help-text">Auto-generated from app name</div>
+                            <input type="text" id="customHostname" placeholder="myapp.siab.local">
+                            <div class="help-text">Auto-generated if left empty</div>
                         </div>
-                        <div class="form-group" id="portGroup" style="display: none;">
+                        <div class="form-group" id="portGroup">
                             <label for="containerPort">Container Port</label>
                             <input type="number" id="containerPort" value="8080" placeholder="8080">
                         </div>
                     </div>
 
-                    <h4 style="margin: 24px 0 16px; color: var(--gray-700);">&#128279; Integrations</h4>
+                    <h4 style="margin: 24px 0 16px; color: var(--text); font-weight: 600;">&#128279; Platform Integrations</h4>
                     <div class="toggle-group">
                         <div class="toggle-row">
                             <div class="toggle-label">
-                                <span>HTTPS Ingress</span>
-                                <small>Expose via https://[app].siab.local</small>
+                                <span>&#127760; HTTPS Ingress</span>
+                                <small>Expose via https://[app].siab.local with TLS</small>
                             </div>
                             <label class="toggle">
                                 <input type="checkbox" id="enableIngress" checked>
@@ -864,7 +1235,7 @@
                         </div>
                         <div class="toggle-row">
                             <div class="toggle-label">
-                                <span>Istio Service Mesh</span>
+                                <span>&#128737; Istio Service Mesh</span>
                                 <small>mTLS, traffic management, observability</small>
                             </div>
                             <label class="toggle">
@@ -874,21 +1245,236 @@
                         </div>
                         <div class="toggle-row">
                             <div class="toggle-label">
-                                <span>Persistent Storage</span>
-                                <small>Longhorn distributed storage</small>
+                                <span>&#128190; Persistent Storage</span>
+                                <small>Longhorn distributed block storage</small>
                             </div>
                             <label class="toggle">
                                 <input type="checkbox" id="enableStorage">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
+                        <div class="toggle-row">
+                            <div class="toggle-label">
+                                <span>&#128451; MinIO Object Storage</span>
+                                <small>S3-compatible bucket with credentials</small>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="enableMinio">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <div class="toggle-label">
+                                <span>&#128274; Keycloak Authentication</span>
+                                <small>Require SSO login to access application</small>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="enableKeycloak">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Storage Options (shown when storage enabled) -->
+                    <div id="storageOptions" style="display: none;" class="advanced-section">
+                        <h4 style="margin-bottom: 16px; color: var(--text); font-weight: 600;">&#128190; Storage Configuration</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="storageSize">Storage Size</label>
+                                <select id="storageSize">
+                                    <option value="1Gi">1 GB</option>
+                                    <option value="5Gi">5 GB</option>
+                                    <option value="10Gi" selected>10 GB</option>
+                                    <option value="20Gi">20 GB</option>
+                                    <option value="50Gi">50 GB</option>
+                                    <option value="100Gi">100 GB</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="storageMountPath">Mount Path</label>
+                                <input type="text" id="storageMountPath" value="/data" placeholder="/data">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="advanced-section">
+                        <div class="advanced-toggle" onclick="toggleAdvanced()">
+                            <span id="advancedIcon">&#9654;</span>
+                            <span>Advanced Options</span>
+                        </div>
+                        <div class="advanced-content" id="advancedContent">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="replicas">Replicas</label>
+                                    <input type="number" id="replicas" value="1" min="1" max="10">
+                                </div>
+                                <div class="form-group">
+                                    <label for="cpuLimit">CPU Limit</label>
+                                    <select id="cpuLimit">
+                                        <option value="">No limit</option>
+                                        <option value="100m">100m (0.1 CPU)</option>
+                                        <option value="250m">250m (0.25 CPU)</option>
+                                        <option value="500m" selected>500m (0.5 CPU)</option>
+                                        <option value="1000m">1000m (1 CPU)</option>
+                                        <option value="2000m">2000m (2 CPU)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="memoryLimit">Memory Limit</label>
+                                    <select id="memoryLimit">
+                                        <option value="">No limit</option>
+                                        <option value="128Mi">128 MB</option>
+                                        <option value="256Mi">256 MB</option>
+                                        <option value="512Mi" selected>512 MB</option>
+                                        <option value="1Gi">1 GB</option>
+                                        <option value="2Gi">2 GB</option>
+                                        <option value="4Gi">4 GB</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="imagePullPolicy">Image Pull Policy</label>
+                                    <select id="imagePullPolicy">
+                                        <option value="Always">Always</option>
+                                        <option value="IfNotPresent" selected>If Not Present</option>
+                                        <option value="Never">Never</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Environment Variables</label>
+                                <div class="env-editor" id="envEditor">
+                                    <div id="envRows"></div>
+                                    <button class="add-env-btn" onclick="addEnvVar()">+ Add Variable</button>
+                                </div>
+                            </div>
+
+                            <div class="toggle-row" style="margin-top: 16px;">
+                                <div class="toggle-label">
+                                    <span>&#128273; Generate Credentials</span>
+                                    <small>Create admin password and store securely</small>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="generateCredentials">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
 
                     <div style="margin-top: 24px; display: flex; gap: 12px;">
-                        <button class="btn btn-success" style="flex: 1;" onclick="deployApplication()" id="deployBtn">
+                        <button class="btn btn-success btn-lg" style="flex: 1;" onclick="deployApplication()" id="deployBtn">
                             &#128640; Deploy Application
                         </button>
-                        <button class="btn btn-secondary" onclick="resetForm()">&#128260; Reset</button>
+                        <button class="btn btn-secondary btn-lg" onclick="resetForm()">&#128260; Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Deploy Page -->
+            <div class="page" id="page-quick">
+                <div class="page-header">
+                    <h2>&#9889; Quick Deploy</h2>
+                    <p>Deploy a container image in seconds</p>
+                </div>
+
+                <div class="quick-deploy-card">
+                    <h3>&#128640; Deploy from Docker Image</h3>
+                    <div class="quick-deploy-row">
+                        <input type="text" id="quickImage" placeholder="nginx:latest or ghcr.io/user/app:v1">
+                        <input type="text" id="quickName" placeholder="my-app" style="max-width: 200px;">
+                        <button class="btn" onclick="quickDeploy()">Deploy</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>&#128230; Popular Images</h3>
+                    </div>
+                    <div class="apps-grid">
+                        <div class="app-card" onclick="setQuickImage('nginx:latest', 'nginx')">
+                            <div class="app-card-header">
+                                <div class="app-icon" style="background: linear-gradient(135deg, #10b981, #059669);">&#127760;</div>
+                                <div class="app-info">
+                                    <div class="app-name">NGINX</div>
+                                    <div class="app-namespace">Web Server</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="app-card" onclick="setQuickImage('redis:alpine', 'redis')">
+                            <div class="app-card-header">
+                                <div class="app-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">&#128190;</div>
+                                <div class="app-info">
+                                    <div class="app-name">Redis</div>
+                                    <div class="app-namespace">In-Memory Database</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="app-card" onclick="setQuickImage('postgres:15', 'postgres')">
+                            <div class="app-card-header">
+                                <div class="app-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">&#128451;</div>
+                                <div class="app-info">
+                                    <div class="app-name">PostgreSQL</div>
+                                    <div class="app-namespace">Relational Database</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="app-card" onclick="setQuickImage('rabbitmq:management', 'rabbitmq')">
+                            <div class="app-card-header">
+                                <div class="app-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">&#128236;</div>
+                                <div class="app-info">
+                                    <div class="app-name">RabbitMQ</div>
+                                    <div class="app-namespace">Message Broker</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>&#9881; Quick Options</h3>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="quickNamespace">Namespace</label>
+                            <select id="quickNamespace">
+                                <option value="default">default</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="quickPort">Container Port</label>
+                            <input type="number" id="quickPort" value="80" placeholder="80">
+                        </div>
+                        <div class="form-group">
+                            <label for="quickReplicas">Replicas</label>
+                            <input type="number" id="quickReplicas" value="1" min="1" max="10">
+                        </div>
+                    </div>
+                    <div class="toggle-group">
+                        <div class="toggle-row">
+                            <div class="toggle-label">
+                                <span>&#127760; Create HTTPS Ingress</span>
+                                <small>Expose at https://[name].siab.local</small>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="quickExpose" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <div class="toggle-label">
+                                <span>&#128190; Add Persistent Storage</span>
+                                <small>10GB volume mounted at /data</small>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="quickStorage">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -899,10 +1485,10 @@
     <div class="modal-overlay" id="deleteModal">
         <div class="modal">
             <h3>&#9888; Delete Application</h3>
-            <p>Are you sure you want to delete <strong id="deleteAppName"></strong>? This action cannot be undone.</p>
+            <p>Are you sure you want to delete <strong id="deleteAppName"></strong>? This will remove the deployment, service, and all associated resources.</p>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Delete Application</button>
             </div>
         </div>
     </div>
@@ -918,38 +1504,65 @@
         let currentRepoInfo = null;
         let appToDelete = null;
         let appsData = [];
+        let envVarCount = 0;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadApplications();
+            loadNamespaces();
             setupDragDrop();
             setupAppNameListener();
-            // Auto-refresh every 30 seconds
+            setupStorageToggle();
+            loadTheme();
             setInterval(loadApplications, 30000);
         });
+
+        // Theme
+        function loadTheme() {
+            const theme = localStorage.getItem('siab-theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('themeToggle').checked = theme === 'dark';
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            document.getElementById('themeToggle').checked = next === 'dark';
+            localStorage.setItem('siab-theme', next);
+        }
+
+        // Sidebar
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
 
         // Navigation
         function showPage(pageId, clickedElement) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-
             document.getElementById('page-' + pageId).classList.add('active');
+            if (clickedElement) clickedElement.classList.add('active');
+            document.getElementById('sidebar').classList.remove('open');
+            if (pageId === 'apps') loadApplications();
+        }
 
-            // Highlight the correct nav item
-            if (clickedElement) {
-                clickedElement.classList.add('active');
-            } else {
-                // Find the nav item for this page and highlight it
-                const navItems = document.querySelectorAll('.nav-item');
-                navItems.forEach(item => {
-                    if (item.textContent.toLowerCase().includes(pageId === 'apps' ? 'application' : pageId)) {
-                        item.classList.add('active');
+        // Load Namespaces
+        async function loadNamespaces() {
+            try {
+                const response = await fetch(`${API_BASE}/api/namespaces`);
+                const data = await response.json();
+                const selects = ['namespace', 'quickNamespace'];
+                selects.forEach(id => {
+                    const select = document.getElementById(id);
+                    if (select && data.namespaces) {
+                        select.innerHTML = data.namespaces.map(ns =>
+                            `<option value="${ns}">${ns}</option>`
+                        ).join('');
                     }
                 });
-            }
-
-            if (pageId === 'apps') {
-                loadApplications();
+            } catch (error) {
+                console.error('Failed to load namespaces:', error);
             }
         }
 
@@ -959,7 +1572,6 @@
                 const response = await fetch(`${API_BASE}/api/applications?namespace=all`);
                 const data = await response.json();
                 appsData = data.applications || [];
-
                 updateStats(appsData);
                 renderApps(appsData);
                 document.getElementById('appCount').textContent = appsData.length;
@@ -971,16 +1583,14 @@
         function updateStats(apps) {
             const running = apps.filter(a => a.ready_replicas === a.replicas && a.ready_replicas > 0).length;
             const namespaces = new Set(apps.map(a => a.namespace)).size;
-
             document.getElementById('statTotal').textContent = apps.length;
             document.getElementById('statRunning').textContent = running;
             document.getElementById('statNamespaces').textContent = namespaces;
-            document.getElementById('statEndpoints').textContent = apps.length; // Each app has an endpoint
+            document.getElementById('statEndpoints').textContent = apps.length;
         }
 
         function renderApps(apps) {
             const grid = document.getElementById('appsGrid');
-
             if (apps.length === 0) {
                 grid.innerHTML = `
                     <div class="empty-state">
@@ -1030,54 +1640,34 @@
         // Deploy Zone
         function setupDragDrop() {
             const zone = document.getElementById('deployZone');
-
-            zone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                zone.classList.add('dragover');
-            });
-
-            zone.addEventListener('dragleave', () => {
-                zone.classList.remove('dragover');
-            });
-
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', () => { zone.classList.remove('dragover'); });
             zone.addEventListener('drop', (e) => {
                 e.preventDefault();
                 zone.classList.remove('dragover');
-                if (e.dataTransfer.files.length > 0) {
-                    handleFileUpload({ target: { files: e.dataTransfer.files } });
-                }
+                if (e.dataTransfer.files.length > 0) handleFileUpload({ target: { files: e.dataTransfer.files } });
             });
         }
 
         function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
-            reader.onload = (e) => {
-                processContent(e.target.result, file.name);
-            };
+            reader.onload = (e) => processContent(e.target.result, file.name);
             reader.readAsText(file);
         }
 
         async function loadFromGit() {
             const url = document.getElementById('gitUrl').value.trim();
-            if (!url) {
-                showAlert('Please enter a Git URL', 'error');
-                return;
-            }
-
+            if (!url) { showAlert('Please enter a Git URL', 'error'); return; }
             showAlert('Fetching from Git...', 'info');
-
             try {
                 const response = await fetch(`${API_BASE}/api/fetch-git`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url })
                 });
-
                 const data = await response.json();
-
                 if (data.success) {
                     currentRepoInfo = data.repo_info || null;
                     processContent(data.content, data.filename || 'from-git');
@@ -1094,19 +1684,11 @@
             currentContent = content;
             const detection = analyzeContent(content, filename);
             currentType = detection.type;
-
-            // Update UI
             document.getElementById('deployZone').classList.add('has-content');
             document.getElementById('configCard').style.display = 'block';
-
             document.getElementById('detectionBadge').style.display = 'flex';
             document.getElementById('detectedType').textContent = detection.typeLabel;
             document.getElementById('detectedDesc').textContent = detection.description;
-
-            // Show port field for Dockerfiles
-            document.getElementById('portGroup').style.display = detection.type === 'dockerfile' ? 'block' : 'none';
-
-            // Auto-fill name
             if (detection.suggestedName) {
                 document.getElementById('appName').value = detection.suggestedName;
                 updateHostname(detection.suggestedName);
@@ -1116,57 +1698,24 @@
         function analyzeContent(content, filename) {
             const lower = content.toLowerCase();
             const fname = filename.toLowerCase();
-
             if (content.includes('apiVersion:') && content.includes('kind:')) {
                 const kinds = [...new Set((content.match(/kind:\s*(\w+)/g) || []).map(m => m.replace('kind:', '').trim()))];
-                return {
-                    type: 'manifest',
-                    typeLabel: 'Kubernetes Manifest',
-                    description: `Contains: ${kinds.join(', ')}`,
-                    icon: '&#9096;',
-                    suggestedName: (content.match(/name:\s*([a-z0-9-]+)/i) || [])[1] || ''
-                };
+                return { type: 'manifest', typeLabel: 'Kubernetes Manifest', description: `Contains: ${kinds.join(', ')}`, suggestedName: (content.match(/name:\s*([a-z0-9-]+)/i) || [])[1] || '' };
             }
-
-            if ((lower.includes('services:') && (lower.includes('image:') || lower.includes('build:'))) ||
-                fname.includes('docker-compose') || fname.includes('compose.y')) {
-                const services = [...new Set((content.match(/^\s{2}(\w+):/gm) || [])
-                    .map(m => m.trim().replace(':', ''))
-                    .filter(s => !['version', 'services', 'volumes', 'networks'].includes(s)))];
-                return {
-                    type: 'compose',
-                    typeLabel: 'Docker Compose',
-                    description: `${services.length} service(s): ${services.slice(0,3).join(', ')}`,
-                    icon: '&#128051;',
-                    suggestedName: services[0] || ''
-                };
+            if ((lower.includes('services:') && (lower.includes('image:') || lower.includes('build:'))) || fname.includes('docker-compose') || fname.includes('compose.y')) {
+                const services = [...new Set((content.match(/^\s{2}(\w+):/gm) || []).map(m => m.trim().replace(':', '')).filter(s => !['version', 'services', 'volumes', 'networks'].includes(s)))];
+                return { type: 'compose', typeLabel: 'Docker Compose', description: `${services.length} service(s): ${services.slice(0,3).join(', ')}`, suggestedName: services[0] || '' };
             }
-
             if ((lower.includes('from ')) && (lower.includes('run ') || lower.includes('cmd ') || lower.includes('copy '))) {
                 const baseImage = (content.match(/FROM\s+([^\s\n]+)/i) || [])[1] || 'unknown';
-                return {
-                    type: 'dockerfile',
-                    typeLabel: 'Dockerfile',
-                    description: `Base: ${baseImage}`,
-                    icon: '&#128051;',
-                    suggestedName: ''
-                };
+                return { type: 'dockerfile', typeLabel: 'Dockerfile', description: `Base: ${baseImage}`, suggestedName: '' };
             }
-
-            return {
-                type: 'unknown',
-                typeLabel: 'Unknown Format',
-                description: 'Will attempt raw deployment',
-                icon: '&#10067;',
-                suggestedName: ''
-            };
+            return { type: 'unknown', typeLabel: 'Unknown Format', description: 'Will attempt raw deployment', suggestedName: '' };
         }
 
         // App name listener
         function setupAppNameListener() {
-            document.getElementById('appName').addEventListener('input', (e) => {
-                updateHostname(e.target.value);
-            });
+            document.getElementById('appName').addEventListener('input', (e) => updateHostname(e.target.value));
         }
 
         function updateHostname(name) {
@@ -1174,73 +1723,100 @@
             document.getElementById('customHostname').value = clean ? `${clean}.${SIAB_DOMAIN}` : '';
         }
 
+        // Storage toggle
+        function setupStorageToggle() {
+            document.getElementById('enableStorage').addEventListener('change', (e) => {
+                document.getElementById('storageOptions').style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+
+        // Advanced options toggle
+        function toggleAdvanced() {
+            const content = document.getElementById('advancedContent');
+            const icon = document.getElementById('advancedIcon');
+            content.classList.toggle('show');
+            icon.textContent = content.classList.contains('show') ? '&#9660;' : '&#9654;';
+        }
+
+        // Environment variables
+        function addEnvVar() {
+            const container = document.getElementById('envRows');
+            const row = document.createElement('div');
+            row.className = 'env-row';
+            row.id = `env-row-${envVarCount}`;
+            row.innerHTML = `
+                <input type="text" placeholder="KEY" id="env-key-${envVarCount}">
+                <input type="text" placeholder="value" id="env-val-${envVarCount}">
+                <button onclick="removeEnvVar(${envVarCount})">&#128465;</button>
+            `;
+            container.appendChild(row);
+            envVarCount++;
+        }
+
+        function removeEnvVar(id) {
+            const row = document.getElementById(`env-row-${id}`);
+            if (row) row.remove();
+        }
+
+        function getEnvVars() {
+            const vars = {};
+            document.querySelectorAll('.env-row').forEach(row => {
+                const inputs = row.querySelectorAll('input');
+                if (inputs[0].value && inputs[1].value) {
+                    vars[inputs[0].value] = inputs[1].value;
+                }
+            });
+            return vars;
+        }
+
         // Deploy
         async function deployApplication() {
             const name = document.getElementById('appName').value.trim();
-            const namespace = document.getElementById('namespace').value.trim() || 'default';
-
-            if (!name) {
-                showAlert('Please enter an application name', 'error');
-                return;
-            }
-
-            if (!currentContent) {
-                showAlert('Please upload or paste content first', 'error');
-                return;
-            }
+            const namespace = document.getElementById('namespace').value;
+            if (!name) { showAlert('Please enter an application name', 'error'); return; }
+            if (!currentContent) { showAlert('Please upload or paste content first', 'error'); return; }
 
             const btn = document.getElementById('deployBtn');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> Deploying...';
 
             try {
+                const storageEnabled = document.getElementById('enableStorage').checked;
                 const config = {
                     name,
                     namespace,
                     content: currentContent,
                     type: currentType,
+                    port: parseInt(document.getElementById('containerPort').value || 8080),
+                    repo_info: currentRepoInfo,
                     integrations: {
                         istio: document.getElementById('enableIstio').checked,
                         ingress: document.getElementById('enableIngress').checked,
                         hostname: document.getElementById('customHostname').value || null,
-                        storage: document.getElementById('enableStorage').checked ? { size: '10Gi', mountPath: '/data' } : null
+                        keycloak: document.getElementById('enableKeycloak').checked,
+                        minio: document.getElementById('enableMinio').checked,
+                        generate_credentials: document.getElementById('generateCredentials').checked,
+                        storage: storageEnabled ? {
+                            size: document.getElementById('storageSize').value,
+                            mountPath: document.getElementById('storageMountPath').value
+                        } : null
                     }
                 };
-
-                if (currentType === 'dockerfile') {
-                    config.port = parseInt(document.getElementById('containerPort')?.value || 8080);
-                    if (currentRepoInfo) config.repo_info = currentRepoInfo;
-                }
 
                 const response = await fetch(`${API_BASE}/api/deploy/smart`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
                 });
-
                 const data = await response.json();
 
                 if (data.success) {
                     showAlert(`Application "${name}" deployed successfully!`, 'success');
                     if (data.access_url) {
-                        showAlert(`Access at: <a href="${data.access_url}" target="_blank" style="color: #4fc3f7">${data.access_url}</a>`, 'info');
+                        showAlert(`Access at: ${data.access_url}`, 'info');
                     }
-                    // Display credentials if generated
                     if (data.credentials) {
-                        const credsHtml = `
-                            <div style="text-align: left; margin-top: 10px;">
-                                <strong>Initial Credentials (save these!):</strong><br>
-                                <code style="background: #1a237e; padding: 2px 6px; border-radius: 3px;">
-                                    Username: ${data.credentials.username}<br>
-                                    Password: ${data.credentials.password}
-                                </code><br>
-                                <small style="color: #90caf9;">Stored in: ${data.credentials.stored_in}</small>
-                                ${data.credentials.oidc ? `<br><br><strong>OIDC/SSO Available:</strong><br>
-                                <small>Client ID: ${data.credentials.oidc.client_id}<br>
-                                Configure in app settings for Keycloak SSO</small>` : ''}
-                            </div>
-                        `;
-                        showAlert(credsHtml, 'warning', 30000); // Show for 30 seconds
+                        showAlert(`Credentials generated - Username: ${data.credentials.username}, Password: ${data.credentials.password}`, 'warning', 30000);
                     }
                     resetForm();
                     showPage('apps', null);
@@ -1256,22 +1832,63 @@
             }
         }
 
+        // Quick Deploy
+        function setQuickImage(image, name) {
+            document.getElementById('quickImage').value = image;
+            document.getElementById('quickName').value = name;
+        }
+
+        async function quickDeploy() {
+            const image = document.getElementById('quickImage').value.trim();
+            const name = document.getElementById('quickName').value.trim();
+            if (!image || !name) { showAlert('Please enter image and name', 'error'); return; }
+
+            showAlert('Deploying...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/api/deploy/quick`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        image,
+                        namespace: document.getElementById('quickNamespace').value,
+                        port: parseInt(document.getElementById('quickPort').value || 80),
+                        replicas: parseInt(document.getElementById('quickReplicas').value || 1),
+                        expose: document.getElementById('quickExpose').checked,
+                        storage_size: document.getElementById('quickStorage').checked ? '10Gi' : null
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showAlert(`${name} deployed!`, 'success');
+                    if (data.access_url) showAlert(`Access at: ${data.access_url}`, 'info');
+                    document.getElementById('quickImage').value = '';
+                    document.getElementById('quickName').value = '';
+                    loadApplications();
+                } else {
+                    showAlert(data.error || 'Failed', 'error');
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
         function resetForm() {
             currentContent = null;
             currentType = null;
             currentRepoInfo = null;
-
             document.getElementById('deployZone').classList.remove('has-content');
             document.getElementById('configCard').style.display = 'none';
             document.getElementById('detectionBadge').style.display = 'none';
             document.getElementById('gitUrl').value = '';
             document.getElementById('appName').value = '';
-            document.getElementById('namespace').value = 'default';
             document.getElementById('customHostname').value = '';
             document.getElementById('fileInput').value = '';
+            document.getElementById('envRows').innerHTML = '';
+            envVarCount = 0;
         }
 
-        // Delete App
+        // Delete
         function showDeleteModal(name, namespace) {
             appToDelete = { name, namespace };
             document.getElementById('deleteAppName').textContent = name;
@@ -1285,16 +1902,11 @@
 
         async function confirmDelete() {
             if (!appToDelete) return;
-
             try {
-                const response = await fetch(`${API_BASE}/api/applications/${appToDelete.name}?namespace=${appToDelete.namespace}`, {
-                    method: 'DELETE'
-                });
-
+                const response = await fetch(`${API_BASE}/api/applications/${appToDelete.name}?namespace=${appToDelete.namespace}`, { method: 'DELETE' });
                 const data = await response.json();
-
                 if (data.success) {
-                    showAlert(`Application "${appToDelete.name}" deleted`, 'success');
+                    showAlert(`"${appToDelete.name}" deleted`, 'success');
                     loadApplications();
                 } else {
                     showAlert(data.error || 'Delete failed', 'error');
@@ -1302,21 +1914,24 @@
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
             }
-
             closeDeleteModal();
         }
 
-        // View Logs
+        // Logs
         async function viewLogs(name, namespace) {
             showAlert('Fetching logs...', 'info');
             try {
                 const response = await fetch(`${API_BASE}/api/applications/${name}/logs?namespace=${namespace}`);
                 const data = await response.json();
-
                 if (data.success) {
-                    // Open in new window or show modal
-                    const logWindow = window.open('', '_blank', 'width=800,height=600');
-                    logWindow.document.write(`<pre style="background:#1a1a2e;color:#a5f3fc;padding:20px;font-family:monospace;white-space:pre-wrap;">${data.logs || 'No logs available'}</pre>`);
+                    const logWindow = window.open('', '_blank', 'width=900,height=700');
+                    logWindow.document.write(`
+                        <html><head><title>Logs: ${name}</title>
+                        <style>body{margin:0;padding:20px;background:#0f172a;color:#94a3b8;font-family:monospace;font-size:14px;}
+                        pre{white-space:pre-wrap;word-wrap:break-word;}</style></head>
+                        <body><h2 style="color:#f1f5f9;margin-bottom:20px;">&#128196; Logs: ${name}</h2>
+                        <pre>${data.logs || 'No logs available'}</pre></body></html>
+                    `);
                 } else {
                     showAlert(data.error || 'Failed to get logs', 'error');
                 }
@@ -1330,18 +1945,18 @@
             const container = document.getElementById('alertContainer');
             const alert = document.createElement('div');
             alert.className = `alert alert-${type}`;
-
             const icons = { success: '&#9989;', error: '&#10060;', info: '&#8505;', warning: '&#9888;' };
+            const titles = { success: 'Success', error: 'Error', info: 'Info', warning: 'Warning' };
             alert.innerHTML = `
-                <span>${icons[type] || icons.info}</span>
-                <span>${message}</span>
+                <span class="alert-icon">${icons[type] || icons.info}</span>
+                <div class="alert-content">
+                    <strong>${titles[type]}</strong>
+                    <span>${message}</span>
+                </div>
                 <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
             `;
-
             container.appendChild(alert);
-            if (timeout > 0) {
-                setTimeout(() => alert.remove(), timeout);
-            }
+            if (timeout > 0) setTimeout(() => alert.remove(), timeout);
         }
     </script>
 </body>
