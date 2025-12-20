@@ -280,9 +280,97 @@ stop_services() {
     fi
 }
 
+# Unmount all Kubernetes and Longhorn volumes
+unmount_volumes() {
+    log_step "Unmounting Kubernetes and Longhorn volumes..."
+
+    # Kill any processes using kubelet directories
+    log_info "Stopping processes using kubelet mounts..."
+    fuser -km /var/lib/kubelet 2>/dev/null || true
+
+    # Kill any containerd/rke2 processes that might hold mounts
+    log_info "Stopping containerd shim processes..."
+    pkill -9 -f "containerd-shim" 2>/dev/null || true
+    sleep 2
+
+    # Unmount all Longhorn CSI volumes
+    log_info "Unmounting Longhorn CSI volumes..."
+    mount | grep "driver.longhorn.io" | awk '{print $3}' | while read -r mnt; do
+        log_info "Unmounting: $mnt"
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+
+    # Unmount all kubelet volume mounts
+    log_info "Unmounting kubelet volumes..."
+    mount | grep "/var/lib/kubelet" | awk '{print $3}' | sort -r | while read -r mnt; do
+        log_info "Unmounting: $mnt"
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+
+    # Unmount all pod volumes
+    log_info "Unmounting pod volumes..."
+    mount | grep "/var/lib/rancher/rke2/agent/kubelet/pods" | awk '{print $3}' | sort -r | while read -r mnt; do
+        log_info "Unmounting: $mnt"
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+
+    # Unmount any tmpfs mounts for secrets/configmaps
+    log_info "Unmounting tmpfs secret/configmap volumes..."
+    mount | grep -E "tmpfs.*kubelet" | awk '{print $3}' | sort -r | while read -r mnt; do
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+
+    # Unmount Longhorn block devices
+    log_info "Unmounting Longhorn block devices..."
+    mount | grep "/dev/longhorn" | awk '{print $3}' | while read -r mnt; do
+        log_info "Unmounting: $mnt"
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+
+    # Detach any remaining Longhorn devices
+    log_info "Detaching Longhorn block devices..."
+    ls /dev/longhorn/* 2>/dev/null | while read -r dev; do
+        log_info "Detaching: $dev"
+        dmsetup remove "$dev" 2>/dev/null || true
+    done
+
+    # Remove Longhorn device mapper entries
+    dmsetup ls 2>/dev/null | grep -i longhorn | awk '{print $1}' | while read -r dm; do
+        log_info "Removing device mapper: $dm"
+        dmsetup remove "$dm" 2>/dev/null || true
+    done
+
+    # Final check - force unmount anything still mounted
+    log_info "Final cleanup of any remaining mounts..."
+    for pattern in "/var/lib/kubelet" "/var/lib/rancher" "longhorn"; do
+        mount | grep "$pattern" | awk '{print $3}' | sort -r | while read -r mnt; do
+            log_warning "Force lazy unmount: $mnt"
+            umount -l "$mnt" 2>/dev/null || true
+        done
+    done
+
+    # Wait for unmounts to complete
+    sleep 3
+    log_success "Volume unmounting complete"
+}
+
 # Uninstall RKE2
 uninstall_rke2() {
     log_step "Uninstalling RKE2 Kubernetes..."
+
+    # First unmount all volumes
+    unmount_volumes
+
+    # Run the RKE2 killall script first if available
+    if [[ -f /usr/local/bin/rke2-killall.sh ]]; then
+        log_info "Running RKE2 killall script..."
+        /usr/local/bin/rke2-killall.sh || log_warning "RKE2 killall script encountered errors (continuing)"
+        sleep 5
+    elif [[ -f /usr/bin/rke2-killall.sh ]]; then
+        log_info "Running RKE2 killall script..."
+        /usr/bin/rke2-killall.sh || log_warning "RKE2 killall script encountered errors (continuing)"
+        sleep 5
+    fi
 
     # Check if RKE2 uninstall script exists
     if [[ -f /usr/local/bin/rke2-uninstall.sh ]]; then
@@ -294,25 +382,38 @@ uninstall_rke2() {
     else
         log_warning "RKE2 uninstall script not found, performing manual cleanup..."
 
-        # Stop RKE2 service
-        if systemctl is-active rke2-server &>/dev/null; then
-            log_info "Stopping RKE2 service..."
-            systemctl stop rke2-server || true
-        fi
+        # Stop RKE2 services
+        log_info "Stopping RKE2 services..."
+        systemctl stop rke2-server 2>/dev/null || true
+        systemctl stop rke2-agent 2>/dev/null || true
+        systemctl disable rke2-server 2>/dev/null || true
+        systemctl disable rke2-agent 2>/dev/null || true
 
-        # Disable RKE2 service
-        if systemctl is-enabled rke2-server &>/dev/null; then
-            log_info "Disabling RKE2 service..."
-            systemctl disable rke2-server || true
-        fi
+        # Kill any remaining RKE2/containerd processes
+        log_info "Killing remaining RKE2 processes..."
+        pkill -9 -f "rke2" 2>/dev/null || true
+        pkill -9 -f "containerd" 2>/dev/null || true
+        pkill -9 -f "kubelet" 2>/dev/null || true
+        sleep 3
 
-        # Remove RKE2 directories
-        log_info "Removing RKE2 directories..."
-        rm -rf /etc/rancher/rke2
-        rm -rf /var/lib/rancher/rke2
-        rm -rf /etc/rancher/node
-        rm -rf /var/lib/kubelet
+        # Unmount again after killing processes
+        unmount_volumes
     fi
+
+    # Remove RKE2 directories (with retry logic)
+    log_info "Removing RKE2 directories..."
+    for dir in /etc/rancher/rke2 /var/lib/rancher/rke2 /etc/rancher/node /var/lib/kubelet; do
+        if [[ -d "$dir" ]]; then
+            log_info "Removing: $dir"
+            rm -rf "$dir" 2>/dev/null || {
+                log_warning "First removal attempt failed for $dir, retrying with force..."
+                # Try to unmount anything still mounted in this directory
+                mount | grep "$dir" | awk '{print $3}' | sort -r | xargs -r -I{} umount -l {} 2>/dev/null || true
+                sleep 1
+                rm -rf "$dir" 2>/dev/null || log_warning "Could not remove $dir - may need reboot"
+            }
+        fi
+    done
 
     # Additional cleanup for CNI and container runtime
     log_info "Cleaning up CNI and container networking..."
@@ -323,6 +424,13 @@ uninstall_rke2() {
     rm -rf /var/log/containers
     rm -rf /run/k3s
     rm -rf /run/flannel
+    rm -rf /run/containerd
+    rm -rf /var/lib/containerd
+
+    # Clean up Longhorn data
+    log_info "Cleaning up Longhorn data..."
+    rm -rf /var/lib/longhorn
+    rm -rf /dev/longhorn
 
     # Clean up iptables rules created by RKE2
     if command -v iptables &>/dev/null; then
