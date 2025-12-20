@@ -2701,9 +2701,16 @@ install_dashboard() {
 
     # Deploy dashboard manifests
     if [[ -f "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" ]]; then
-        # Apply the manifest (skip the HTML configmap since we created it above)
+        # Apply the manifest but skip the siab-dashboard-html ConfigMap since we created it above
+        # Use awk to filter out the HTML ConfigMap document
         sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" | \
-            grep -v "^  index.html:" | run_quiet kubectl apply -f -
+            awk '
+                /^---$/ { if (skip) skip=0; print; next }
+                /kind: ConfigMap/ { pending_cm=1 }
+                pending_cm && /name: siab-dashboard-html/ { skip=1; pending_cm=0 }
+                pending_cm && /name:/ { pending_cm=0 }
+                !skip { print }
+            ' | run_quiet kubectl apply -f -
         log_info "Dashboard manifests applied"
     else
         log_warn "Dashboard manifest not found at ${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml"
@@ -2756,6 +2763,19 @@ install_deployer() {
     run_quiet_ok kubectl create namespace siab-deployer
     run_quiet_ok kubectl label namespace siab-deployer istio-injection=enabled --overwrite
 
+    # Create backend code ConfigMap from actual source files
+    local backend_dir="${SIAB_REPO_DIR}/app-deployer/backend"
+    if [[ -f "${backend_dir}/app-deployer-api.py" ]] && [[ -f "${backend_dir}/requirements.txt" ]]; then
+        kubectl create configmap deployer-backend-code \
+            --from-file=app-deployer-api.py="${backend_dir}/app-deployer-api.py" \
+            --from-file=requirements.txt="${backend_dir}/requirements.txt" \
+            -n siab-deployer \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
+        log_info "Backend code ConfigMap created"
+    else
+        log_warn "Backend source files not found at ${backend_dir}"
+    fi
+
     # Read and inject frontend HTML content if it exists
     local frontend_html="${SIAB_REPO_DIR}/app-deployer/frontend/index.html"
     if [[ -f "$frontend_html" ]]; then
@@ -2782,7 +2802,16 @@ install_deployer() {
     fi
 
     # Apply the deployer manifest with domain substitution
-    sed "s/siab\.local/${SIAB_DOMAIN}/g" "$deployer_manifest" | run_quiet kubectl apply -f -
+    # Skip the placeholder ConfigMaps (deployer-backend-code, deployer-frontend-html) since we created them above
+    sed "s/siab\.local/${SIAB_DOMAIN}/g" "$deployer_manifest" | \
+        awk '
+            /^---$/ { if (skip) skip=0; print; next }
+            /kind: ConfigMap/ { pending_cm=1 }
+            pending_cm && /name: deployer-backend-code/ { skip=1; pending_cm=0 }
+            pending_cm && /name: deployer-frontend-html/ { skip=1; pending_cm=0 }
+            pending_cm && /name:/ { pending_cm=0 }
+            !skip { print }
+        ' | run_quiet kubectl apply -f -
     log_info "Deployer manifests applied"
 
     # Wait for deployer to be ready
