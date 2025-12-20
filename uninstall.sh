@@ -189,7 +189,7 @@ backup_configs() {
         kubectl get namespaces -o yaml > "${BACKUP_DIR}/k8s-resources/namespaces.yaml" 2>/dev/null || true
 
         # Export resources from important namespaces
-        for ns in istio-system keycloak minio longhorn-system monitoring; do
+        for ns in istio-system keycloak minio longhorn-system monitoring siab-deployer siab-dashboard siab-system oauth2-proxy kubernetes-dashboard cert-manager metallb-system gatekeeper-system trivy-system; do
             if kubectl get namespace "${ns}" &>/dev/null; then
                 log_info "Exporting namespace: ${ns}"
                 mkdir -p "${BACKUP_DIR}/k8s-resources/${ns}"
@@ -254,12 +254,23 @@ stop_services() {
 
         # Delete SIAB-specific namespaces
         log_info "Deleting SIAB namespaces..."
-        for ns in keycloak minio longhorn-system monitoring istio-system cert-manager metallb-system gatekeeper-system trivy-system siab; do
+        for ns in siab-deployer siab-dashboard siab-system oauth2-proxy kubernetes-dashboard keycloak minio longhorn-system monitoring istio-system cert-manager metallb-system gatekeeper-system trivy-system siab; do
             if kubectl get namespace "${ns}" &>/dev/null; then
                 log_info "Deleting namespace: ${ns}"
                 kubectl delete namespace "${ns}" --wait=false 2>/dev/null || true
             fi
         done
+
+        # Delete cluster-wide RBAC resources created by SIAB
+        log_info "Deleting SIAB cluster-wide RBAC resources..."
+        for resource in app-deployer siab-admin kubernetes-dashboard-admin; do
+            kubectl delete clusterrolebinding "${resource}" 2>/dev/null || true
+            kubectl delete clusterrole "${resource}" 2>/dev/null || true
+        done
+
+        # Delete any remaining Istio CRDs
+        log_info "Cleaning up Istio CRDs..."
+        kubectl get crd -o name 2>/dev/null | grep -E "istio|cert-manager|gatekeeper|longhorn|trivy" | xargs -r kubectl delete 2>/dev/null || true
 
         # Wait a moment for graceful shutdown
         log_info "Waiting for graceful shutdown (30 seconds)..."
