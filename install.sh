@@ -2782,8 +2782,13 @@ install_deployer() {
         local html_content
         html_content=$(cat "$frontend_html" | sed "s/siab\.local/${SIAB_DOMAIN}/g")
 
-        # Create ConfigMap with the frontend HTML
+        # Create ConfigMap with the frontend HTML (both names for compatibility)
         kubectl create configmap app-deployer-frontend-html \
+            --from-literal=index.html="$html_content" \
+            -n siab-deployer \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
+        # Also create with the name expected by deployment manifest
+        kubectl create configmap deployer-frontend-html \
             --from-literal=index.html="$html_content" \
             -n siab-deployer \
             --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
