@@ -484,23 +484,44 @@ def detect_content_type(content, filename=''):
     }
 
 
-def parse_docker_compose(compose_content):
-    """Convert docker-compose.yml to Kubernetes manifests"""
+def parse_docker_compose(compose_content, base_name=None):
+    """Convert docker-compose.yml to Kubernetes manifests
+
+    Returns a dict with:
+    - manifests: list of Deployment/Service manifests
+    - services_info: list of service info for creating VirtualServices
+    """
     try:
         compose = yaml.safe_load(compose_content)
         services = compose.get('services', {})
         manifests = []
+        services_info = []  # Track services that need ingress
 
         for service_name, service_config in services.items():
             # Create deployment
-            image = service_config.get('image', 'nginx:latest')
+            image = service_config.get('image')
+            build_config = service_config.get('build')
+
+            # Handle build context - need to use a base image or skip
+            if not image and build_config:
+                # If building from Dockerfile, we can't build here - skip or use placeholder
+                logger.warning(f"Service {service_name} uses build - requires image or pre-built container")
+                continue
+
+            if not image:
+                image = 'nginx:latest'  # Default fallback
+
             ports = service_config.get('ports', [])
             environment = service_config.get('environment', [])
             volumes = service_config.get('volumes', [])
+            depends_on = service_config.get('depends_on', [])
+            restart_policy = service_config.get('restart', 'always')
 
             # Parse ports
             container_ports = []
             service_ports = []
+            primary_port = None
+
             for port in ports:
                 if isinstance(port, str):
                     parts = port.split(':')
@@ -509,6 +530,9 @@ def parse_docker_compose(compose_content):
                         container_port = int(parts[1].split('/')[0])
                     else:
                         host_port = container_port = int(parts[0].split('/')[0])
+                elif isinstance(port, dict):
+                    host_port = port.get('published', port.get('target', 80))
+                    container_port = port.get('target', 80)
                 else:
                     host_port = container_port = int(port)
 
@@ -522,6 +546,10 @@ def parse_docker_compose(compose_content):
                     'name': f'port-{container_port}'
                 })
 
+                # Track primary port (first web-like port)
+                if not primary_port and container_port in [80, 443, 8080, 8000, 3000, 5000, 9000]:
+                    primary_port = host_port
+
             # Parse environment variables
             env_vars = []
             if isinstance(environment, list):
@@ -533,7 +561,34 @@ def parse_docker_compose(compose_content):
                 for key, value in environment.items():
                     env_vars.append({'name': key, 'value': str(value) if value else ''})
 
+            # Parse volume mounts
+            volume_mounts = []
+            volumes_spec = []
+            for i, vol in enumerate(volumes):
+                if isinstance(vol, str):
+                    parts = vol.split(':')
+                    if len(parts) >= 2:
+                        mount_path = parts[1]
+                        volume_mounts.append({
+                            'name': f'vol-{i}',
+                            'mountPath': mount_path
+                        })
+                        volumes_spec.append({
+                            'name': f'vol-{i}',
+                            'emptyDir': {}  # Use emptyDir for now, PVC can be added later
+                        })
+
             # Create deployment manifest
+            container_spec = {
+                'name': service_name,
+                'image': image,
+                'ports': container_ports if container_ports else [{'containerPort': 80, 'name': 'http'}],
+                'env': env_vars
+            }
+
+            if volume_mounts:
+                container_spec['volumeMounts'] = volume_mounts
+
             deployment = {
                 'apiVersion': 'apps/v1',
                 'kind': 'Deployment',
@@ -541,7 +596,8 @@ def parse_docker_compose(compose_content):
                     'name': service_name,
                     'labels': {
                         'app': service_name,
-                        'deployed-by': 'siab-deployer'
+                        'deployed-by': 'siab-deployer',
+                        'compose-project': base_name or 'default'
                     }
                 },
                 'spec': {
@@ -554,20 +610,19 @@ def parse_docker_compose(compose_content):
                     'template': {
                         'metadata': {
                             'labels': {
-                                'app': service_name
+                                'app': service_name,
+                                'compose-project': base_name or 'default'
                             }
                         },
                         'spec': {
-                            'containers': [{
-                                'name': service_name,
-                                'image': image,
-                                'ports': container_ports if container_ports else [{'containerPort': 80, 'name': 'http'}],
-                                'env': env_vars
-                            }]
+                            'containers': [container_spec]
                         }
                     }
                 }
             }
+
+            if volumes_spec:
+                deployment['spec']['template']['spec']['volumes'] = volumes_spec
 
             manifests.append(deployment)
 
@@ -579,7 +634,8 @@ def parse_docker_compose(compose_content):
                     'metadata': {
                         'name': service_name,
                         'labels': {
-                            'app': service_name
+                            'app': service_name,
+                            'compose-project': base_name or 'default'
                         }
                     },
                     'spec': {
@@ -591,7 +647,17 @@ def parse_docker_compose(compose_content):
                 }
                 manifests.append(service)
 
-        return manifests
+                # Track services that expose web ports for VirtualService creation
+                web_ports = [80, 443, 8080, 8000, 3000, 5000, 9000, 8443]
+                exposed_port = service_ports[0]['port'] if service_ports else 80
+                if any(p['targetPort'] in web_ports or p['port'] in web_ports for p in (service_ports or [{'port': 80, 'targetPort': 80}])):
+                    services_info.append({
+                        'name': service_name,
+                        'port': exposed_port,
+                        'is_primary': service_name == list(services.keys())[0]
+                    })
+
+        return {'manifests': manifests, 'services_info': services_info}
     except Exception as e:
         logger.error(f"Failed to parse docker-compose: {str(e)}")
         raise
@@ -639,10 +705,44 @@ def check_prebuilt_image(dockerfile_content, repo_info=None):
     from_match = re.search(r'FROM\s+([^\s\n]+)', dockerfile_content, re.IGNORECASE)
     if from_match:
         base_image = from_match.group(1)
-        # If FROM uses a specific app image (not a base like alpine/ubuntu), suggest it
         base_lower = base_image.lower()
-        if not any(base in base_lower for base in ['alpine', 'ubuntu', 'debian', 'python', 'node', 'golang', 'rust']):
-            return base_image, 8080
+
+        # Common app images that can be used directly
+        direct_use_images = [
+            'nginx', 'redis', 'mysql', 'mariadb', 'postgres', 'mongodb', 'mongo',
+            'httpd', 'apache', 'traefik', 'caddy', 'haproxy', 'varnish',
+            'elasticsearch', 'kibana', 'logstash', 'grafana', 'prometheus',
+            'jenkins', 'gitlab', 'gitea', 'drone', 'sonarqube',
+            'wordpress', 'drupal', 'joomla', 'ghost', 'nextcloud',
+            'rabbitmq', 'nats', 'kafka', 'zookeeper', 'consul', 'vault',
+            'minio', 'registry', 'portainer', 'adminer', 'phpmyadmin',
+            'busybox', 'hello-world'
+        ]
+
+        # If it's a known app image or a full registry path, use it directly
+        if any(app in base_lower for app in direct_use_images) or '/' in base_image:
+            # Determine appropriate port
+            port_map = {
+                'nginx': 80, 'httpd': 80, 'apache': 80, 'caddy': 80,
+                'traefik': 80, 'haproxy': 80, 'varnish': 80,
+                'redis': 6379, 'mysql': 3306, 'mariadb': 3306,
+                'postgres': 5432, 'mongodb': 27017, 'mongo': 27017,
+                'elasticsearch': 9200, 'kibana': 5601, 'grafana': 3000,
+                'prometheus': 9090, 'jenkins': 8080, 'gitlab': 80,
+                'gitea': 3000, 'nextcloud': 80, 'wordpress': 80,
+                'rabbitmq': 5672, 'minio': 9000, 'registry': 5000,
+                'portainer': 9000, 'adminer': 8080, 'phpmyadmin': 80,
+            }
+            # Extract just the image name (before :tag)
+            image_name = base_lower.split(':')[0].split('/')[-1]
+            port = port_map.get(image_name, 80)
+            return base_image, port
+
+        # If it's a simple base image (alpine, ubuntu etc), we can't use it directly
+        # But check if it's the ONLY instruction - if so, just use it
+        lines = [l.strip() for l in dockerfile_content.strip().split('\n') if l.strip() and not l.strip().startswith('#')]
+        if len(lines) <= 2:  # Just FROM (and maybe one other simple instruction)
+            return base_image, 80
 
     return None, None
 
@@ -798,9 +898,70 @@ def health():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
 
+def scan_github_repo(org, repo, branch='main'):
+    """Scan a GitHub repository for deployment files using the API"""
+    found_files = []
+
+    # Use GitHub API to get repository tree
+    api_url = f"https://api.github.com/repos/{org}/{repo}/git/trees/{branch}?recursive=1"
+    try:
+        req = urllib.request.Request(api_url, headers={
+            'User-Agent': 'SIAB-Deployer',
+            'Accept': 'application/vnd.github.v3+json'
+        })
+        response = urllib.request.urlopen(req, timeout=15)
+        data = json.loads(response.read().decode('utf-8'))
+
+        # Look for deployment files
+        deployment_patterns = [
+            'Dockerfile', 'dockerfile',
+            'docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml',
+            'kubernetes.yaml', 'kubernetes.yml', 'k8s.yaml', 'k8s.yml',
+            'deployment.yaml', 'deployment.yml',
+            'Chart.yaml'
+        ]
+
+        for item in data.get('tree', []):
+            if item['type'] == 'blob':
+                path = item['path']
+                filename = path.split('/')[-1]
+                if filename in deployment_patterns or filename.lower() == 'dockerfile':
+                    found_files.append({
+                        'path': path,
+                        'filename': filename,
+                        'type': 'dockerfile' if 'dockerfile' in filename.lower() else
+                               'compose' if 'compose' in filename.lower() else
+                               'manifest' if any(x in filename.lower() for x in ['kubernetes', 'k8s', 'deployment']) else
+                               'helm' if filename == 'Chart.yaml' else 'unknown'
+                    })
+
+        return found_files
+    except urllib.error.HTTPError as e:
+        if e.code == 404 and branch == 'main':
+            # Try master branch
+            return scan_github_repo(org, repo, 'master')
+        return []
+    except Exception as e:
+        logger.warning(f"GitHub API scan failed: {e}")
+        return []
+
+
+def fetch_github_file(org, repo, path, branch='main'):
+    """Fetch a specific file from GitHub"""
+    raw_url = f"https://raw.githubusercontent.com/{org}/{repo}/{branch}/{path}"
+    try:
+        req = urllib.request.Request(raw_url, headers={'User-Agent': 'SIAB-Deployer'})
+        response = urllib.request.urlopen(req, timeout=10)
+        return response.read().decode('utf-8')
+    except urllib.error.HTTPError as e:
+        if e.code == 404 and branch == 'main':
+            return fetch_github_file(org, repo, path, 'master')
+        return None
+
+
 @app.route('/api/fetch-git', methods=['POST'])
 def fetch_git():
-    """Fetch content from a Git repository URL"""
+    """Fetch content from a Git repository URL - scans for all Dockerfiles and compose files"""
     try:
         data = request.get_json()
         url = data.get('url', '').strip()
@@ -808,10 +969,10 @@ def fetch_git():
         if not url:
             return jsonify({'success': False, 'error': 'No URL provided'}), 400
 
-        # Handle GitHub/GitLab raw file URLs
         content = None
         filename = 'manifest.yaml'
-        repo_info = None  # Track repo org/name for pre-built image detection
+        repo_info = None
+        all_files = []  # Track all found deployment files
 
         # Convert GitHub blob URLs to raw URLs
         if 'github.com' in url and '/blob/' in url:
@@ -821,23 +982,18 @@ def fetch_git():
         if 'gitlab.com' in url and '/-/blob/' in url:
             url = url.replace('/-/blob/', '/-/raw/')
 
-        # If it's a repo URL, look for common files
+        # If it's a GitHub repo URL, scan for all deployment files
         if 'github.com' in url and '/blob/' not in url and '/raw/' not in url:
-            # Try to fetch common deployment files
             repo_parts = url.rstrip('/').split('/')
             if len(repo_parts) >= 5:
-                # Extract repo info for pre-built image detection
-                repo_info = {
-                    'org': repo_parts[3],
-                    'repo': repo_parts[4]
-                }
+                org = repo_parts[3]
+                repo = repo_parts[4]
+                repo_info = {'org': org, 'repo': repo}
 
                 # Special handling for linuxserver repos - they always have pre-built images
-                if 'linuxserver' in repo_info['org'].lower():
-                    app_name = repo_info['repo'].replace('docker-', '')
+                if 'linuxserver' in org.lower():
+                    app_name = repo.replace('docker-', '')
                     prebuilt_image = f"lscr.io/linuxserver/{app_name}:latest"
-
-                    # Determine default port based on app type
                     port_map = {
                         'nextcloud': 80, 'nginx': 80, 'swag': 443, 'heimdall': 80,
                         'mariadb': 3306, 'postgres': 5432, 'plex': 32400,
@@ -848,34 +1004,47 @@ def fetch_git():
                         'chromium': 3000, 'mullvad-browser': 3000,
                     }
                     port = port_map.get(app_name, 3000)
-
-                    # Return a synthetic Dockerfile that references the pre-built image
                     content = f"# LinuxServer.io pre-built image\nFROM {prebuilt_image}\n# Default port: {port}"
                     filename = "Dockerfile"
                     logger.info(f"LinuxServer repo detected: using pre-built image {prebuilt_image}")
                 else:
-                    base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/main"
-                    files_to_try = [
-                        'kubernetes.yaml', 'k8s.yaml', 'deployment.yaml', 'deploy.yaml',
-                        'docker-compose.yml', 'docker-compose.yaml', 'compose.yaml',
-                        'Dockerfile', 'Chart.yaml',
-                        'root/Dockerfile'  # Common for linuxserver-style repos
-                    ]
+                    # Scan repository for all deployment files
+                    found_files = scan_github_repo(org, repo)
+                    logger.info(f"Found {len(found_files)} deployment files in {org}/{repo}")
 
-                    for f in files_to_try:
-                        try:
-                            test_url = f"{base_raw}/{f}"
-                            req = urllib.request.Request(test_url, headers={'User-Agent': 'SIAB-Deployer'})
-                            response = urllib.request.urlopen(req, timeout=10)
-                            content = response.read().decode('utf-8')
-                            filename = f.split('/')[-1]  # Get just the filename
-                            break
-                        except urllib.error.HTTPError:
-                            continue
+                    if found_files:
+                        # Prioritize: docker-compose > Dockerfile > kubernetes manifests
+                        compose_files = [f for f in found_files if f['type'] == 'compose']
+                        dockerfiles = [f for f in found_files if f['type'] == 'dockerfile']
+                        manifests = [f for f in found_files if f['type'] in ['manifest', 'helm']]
 
+                        # Store all found files for UI to display
+                        all_files = found_files
+
+                        # Pick the best primary file
+                        if compose_files:
+                            # Prefer root-level compose file
+                            primary = next((f for f in compose_files if '/' not in f['path']), compose_files[0])
+                            content = fetch_github_file(org, repo, primary['path'])
+                            filename = primary['filename']
+                        elif dockerfiles:
+                            # Prefer root-level Dockerfile
+                            primary = next((f for f in dockerfiles if '/' not in f['path']), dockerfiles[0])
+                            content = fetch_github_file(org, repo, primary['path'])
+                            filename = primary['filename']
+                        elif manifests:
+                            primary = manifests[0]
+                            content = fetch_github_file(org, repo, primary['path'])
+                            filename = primary['filename']
+
+                    # Fallback: try common locations manually
                     if not content:
-                        # Try master branch
-                        base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/master"
+                        base_raw = f"https://raw.githubusercontent.com/{org}/{repo}/main"
+                        files_to_try = [
+                            'docker-compose.yml', 'docker-compose.yaml', 'compose.yaml',
+                            'Dockerfile', 'kubernetes.yaml', 'k8s.yaml', 'deployment.yaml',
+                            'Chart.yaml', 'root/Dockerfile', 'app/Dockerfile', 'src/Dockerfile'
+                        ]
                         for f in files_to_try:
                             try:
                                 test_url = f"{base_raw}/{f}"
@@ -887,14 +1056,26 @@ def fetch_git():
                             except urllib.error.HTTPError:
                                 continue
 
-        # Direct URL fetch (only for raw file URLs, not repo pages)
+                        # Try master branch
+                        if not content:
+                            base_raw = f"https://raw.githubusercontent.com/{org}/{repo}/master"
+                            for f in files_to_try:
+                                try:
+                                    test_url = f"{base_raw}/{f}"
+                                    req = urllib.request.Request(test_url, headers={'User-Agent': 'SIAB-Deployer'})
+                                    response = urllib.request.urlopen(req, timeout=10)
+                                    content = response.read().decode('utf-8')
+                                    filename = f.split('/')[-1]
+                                    break
+                                except urllib.error.HTTPError:
+                                    continue
+
+        # Direct URL fetch (for raw file URLs)
         if not content:
-            # Don't try to fetch GitHub repo pages directly - they return HTML
             if 'github.com' in url and '/raw/' not in url and 'raw.githubusercontent.com' not in url:
-                # This is a repo URL where we couldn't find any deployment files
                 return jsonify({
                     'success': False,
-                    'error': 'No deployment files found in repository. Looking for: Dockerfile, docker-compose.yml, kubernetes.yaml, Chart.yaml'
+                    'error': 'No deployment files found in repository. Looking for: Dockerfile, docker-compose.yml, kubernetes.yaml, Chart.yaml in any directory.'
                 }), 404
 
             try:
@@ -903,7 +1084,6 @@ def fetch_git():
                 content = response.read().decode('utf-8')
                 filename = url.split('/')[-1] or 'manifest.yaml'
 
-                # Safety check: if we got HTML instead of expected content, fail
                 if content.strip().startswith('<!DOCTYPE') or content.strip().startswith('<html'):
                     return jsonify({
                         'success': False,
@@ -914,7 +1094,6 @@ def fetch_git():
 
         if content:
             detected = detect_content_type(content, filename)
-            # Add repo_info for pre-built image detection
             if repo_info:
                 detected['repo_info'] = repo_info
 
@@ -923,7 +1102,8 @@ def fetch_git():
                 'content': content,
                 'filename': filename,
                 'detected_type': detected,
-                'repo_info': repo_info
+                'repo_info': repo_info,
+                'all_files': all_files  # List of all deployment files found
             })
         else:
             return jsonify({'success': False, 'error': 'No deployable content found in repository'}), 404
@@ -970,7 +1150,10 @@ def smart_deploy():
 
         elif content_type == 'compose':
             # Convert docker-compose to Kubernetes
-            manifests = parse_docker_compose(content)
+            compose_result = parse_docker_compose(content, base_name=name)
+            manifests = compose_result['manifests']
+            services_info = compose_result['services_info']
+
             for manifest in manifests:
                 manifest['metadata']['namespace'] = namespace
                 if 'labels' not in manifest['metadata']:
@@ -981,6 +1164,23 @@ def smart_deploy():
                 result = run_command('kubectl apply -f -', input_data=yaml_content)
                 if not result['success']:
                     logger.error(f"Failed to apply manifest: {result['stderr']}")
+
+            # Create VirtualServices for all web-exposed services
+            created_routes = []
+            if integrations.get('ingress') and services_info:
+                for svc in services_info:
+                    if svc['is_primary']:
+                        # Primary service gets the main hostname
+                        hostname = integrations.get('hostname') or f"{name}.{SIAB_DOMAIN}"
+                    else:
+                        # Secondary services get subdomains
+                        hostname = f"{svc['name']}.{SIAB_DOMAIN}"
+
+                    create_ingress_route(namespace, svc['name'], svc['port'], hostname)
+                    created_routes.append(f"https://{hostname}")
+
+                if created_routes:
+                    access_url = created_routes[0]  # Primary URL
 
             # Use first service as main
             if manifests:
