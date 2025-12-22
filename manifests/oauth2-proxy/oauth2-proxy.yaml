@@ -89,12 +89,15 @@ data:
     # Upstreams (use with ext_authz)
     upstreams = ["static://200"]
 
-    # Skip authentication for these paths
+    # Skip authentication for these paths ONLY
+    # DO NOT skip /oauth2/auth - that's the ext_authz check endpoint
     skip_auth_routes = [
       "^/health$",
       "^/ping$",
       "^/ready$",
-      "^/oauth2/"
+      "^/oauth2/callback",
+      "^/oauth2/sign_out",
+      "^/oauth2/start"
     ]
 
     # Logging

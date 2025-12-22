@@ -3,8 +3,8 @@
 This file tracks ongoing work across Claude Code sessions. Read this at session start.
 
 ## Current Session
-**Last Updated:** 2025-12-22 01:50
-**Status:** App Deployer improvements completed - git repo scanning, docker-compose, auth flow
+**Last Updated:** 2025-12-22 13:57
+**Status:** OAuth2 authentication fix applied - all deployed apps now require Keycloak login
 
 ---
 
@@ -27,6 +27,17 @@ _None_
 
 ## Completed
 <!-- Recently completed tasks (keep last 10-15) -->
+
+- [x] Fix OAuth2 authentication bypass (2025-12-22)
+  - **Bug**: `skip_auth_routes = ["^/oauth2/"]` was too broad, skipping `/oauth2/auth` endpoint
+  - **Fix**: Changed to explicit paths: `/oauth2/callback`, `/oauth2/sign_out`, `/oauth2/start`
+  - **Result**: All deployed apps now properly require Keycloak authentication
+  - **Added**: `allow-deployed-apps` AuthorizationPolicy for `*.siab.local` hosts
+
+- [x] Opera browser deployment test (2025-12-22)
+  - Deployed linuxserver/docker-opera via App Deployer
+  - Fixed RBAC access denied error with AuthorizationPolicy
+  - Verified OAuth2 redirect to Keycloak for unauthenticated requests
 
 - [x] App Deployer improvements (2025-12-22)
   - **Git repo scanning**: Uses GitHub API to find Dockerfiles/compose files in ANY directory
@@ -112,7 +123,8 @@ All pods Running/Completed except:
 - [x] Linuxserver repo: Auto-detected pre-built image
 - [x] Simple Dockerfile: nginx:alpine deployed successfully
 - [x] VirtualService: Uses user-gateway correctly
-- [x] OAuth2: Returns 403 for unauthenticated requests
+- [x] OAuth2: Returns 302 redirect to Keycloak for unauthenticated requests
+- [x] Opera browser: Deployed successfully via linuxserver/docker-opera
 
 ---
 
@@ -120,6 +132,7 @@ All pods Running/Completed except:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v0.0.12 | 2025-12-22 | Fix OAuth2 authentication bypass and add AuthorizationPolicy for deployed apps |
 | v0.0.11 | 2025-12-22 | App deployer improvements - git scanning, compose, dockerfile support |
 | v0.0.10 | 2025-12-22 | Repository cleanup and documentation updates |
 | v0.0.9 | 2025-12-22 | Fix dashboard/deployer DNS entries for user gateway |
@@ -132,9 +145,9 @@ All pods Running/Completed except:
 
 - **All services verified working** (2025-12-22)
 - **App Deployer fully functional** with git scanning, compose, dockerfile support
-- **Authentication required** for all apps on user-gateway (by design)
-- To access deployed apps, user must first authenticate via Keycloak
-- **Test app deployed**: nginx-test.siab.local (demonstrates full flow)
+- **OAuth2 authentication enforced** on all deployed apps via user-gateway
+- **Test apps deployed**: opera.siab.local, nginx-test.siab.local (both require Keycloak login)
+- To access deployed apps, user must authenticate via Keycloak (302 redirect)
 - Credentials at `/etc/siab/credentials.env`
 
 ---
@@ -162,8 +175,8 @@ kubectl get svc -n istio-system
 # Admin gateway (no auth required)
 curl -sk --resolve keycloak.siab.local:443:10.10.30.240 https://keycloak.siab.local/realms/master
 
-# User gateway (requires auth - expect 403)
-curl -sk --resolve deployer.siab.local:443:10.10.30.242 https://deployer.siab.local/
+# User gateway (requires auth - expect 302 redirect to Keycloak)
+curl -sk --resolve deployer.siab.local:443:10.10.30.242 https://deployer.siab.local/ -w "\nHTTP: %{http_code}\n"
 ```
 
 **Credentials:** `/etc/siab/credentials.env`

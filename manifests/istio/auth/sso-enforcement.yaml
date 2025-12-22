@@ -223,3 +223,27 @@ spec:
     - name: Authorization
       prefix: "Bearer "
     # Note: fromCookies is not supported in Istio 1.20.x
+---
+# =============================================================================
+# Allow Deployed Apps
+# =============================================================================
+# Allow access to all deployed apps (they are protected by ext_authz/OAuth2 Proxy)
+# This enables dynamically deployed apps to be accessible via user-gateway
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-deployed-apps
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: ingress-user
+  action: ALLOW
+  rules:
+  - to:
+    - operation:
+        hosts:
+        - "*.siab.local"
+        - "*.siab.local:*"
+        - "*.apps.siab.local"
+        - "*.apps.siab.local:*"
