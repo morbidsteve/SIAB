@@ -61,6 +61,34 @@ spec:
           failure_mode_allow: false
           status_on_error:
             code: 503
+          clear_route_cache: true
+---
+# EnvoyFilter to bypass ext_authz for auth.siab.local (OAuth2 Proxy endpoints)
+# This prevents redirect loops during the OAuth2 callback flow
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: oauth2-bypass-auth-host
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      istio: ingress-user
+  configPatches:
+  # Add per-route config to disable ext_authz for auth.siab.local
+  - applyTo: VIRTUAL_HOST
+    match:
+      context: GATEWAY
+      routeConfiguration:
+        vhost:
+          name: "auth.siab.local:443"
+    patch:
+      operation: MERGE
+      value:
+        typed_per_filter_config:
+          envoy.filters.http.ext_authz:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+            disabled: true
 
 ---
 # =============================================================================

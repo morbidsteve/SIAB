@@ -3,8 +3,8 @@
 This file tracks ongoing work across Claude Code sessions. Read this at session start.
 
 ## Current Session
-**Last Updated:** 2025-12-22 13:57
-**Status:** OAuth2 authentication fix applied - all deployed apps now require Keycloak login
+**Last Updated:** 2025-12-22 15:32
+**Status:** OAuth2 authentication flow fully fixed - PKCE enabled, redirect loop resolved
 
 ---
 
@@ -28,10 +28,14 @@ _None_
 ## Completed
 <!-- Recently completed tasks (keep last 10-15) -->
 
-- [x] Fix OAuth2 authentication bypass (2025-12-22)
-  - **Bug**: `skip_auth_routes = ["^/oauth2/"]` was too broad, skipping `/oauth2/auth` endpoint
-  - **Fix**: Changed to explicit paths: `/oauth2/callback`, `/oauth2/sign_out`, `/oauth2/start`
-  - **Result**: All deployed apps now properly require Keycloak authentication
+- [x] Fix OAuth2 authentication flow (2025-12-22)
+  - **Bug 1**: `skip_auth_routes = ["^/oauth2/"]` was too broad, skipping `/oauth2/auth` endpoint
+  - **Fix 1**: Changed to explicit paths: `/oauth2/callback`, `/oauth2/sign_out`, `/oauth2/start`
+  - **Bug 2**: Keycloak 23+ requires PKCE but OAuth2 Proxy wasn't sending it
+  - **Fix 2**: Added `code_challenge_method = "S256"` to OAuth2 Proxy config
+  - **Bug 3**: auth.siab.local caught in ext_authz loop during callback
+  - **Fix 3**: Added EnvoyFilter to bypass ext_authz for auth.siab.local host
+  - **Result**: Full OAuth2 flow working - user gateway apps redirect to Keycloak
   - **Added**: `allow-deployed-apps` AuthorizationPolicy for `*.siab.local` hosts
 
 - [x] Opera browser deployment test (2025-12-22)
@@ -132,6 +136,7 @@ All pods Running/Completed except:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v0.0.13 | 2025-12-22 | Fix OAuth2 redirect loop - PKCE support, auth.siab.local bypass |
 | v0.0.12 | 2025-12-22 | Fix OAuth2 authentication bypass and add AuthorizationPolicy for deployed apps |
 | v0.0.11 | 2025-12-22 | App deployer improvements - git scanning, compose, dockerfile support |
 | v0.0.10 | 2025-12-22 | Repository cleanup and documentation updates |

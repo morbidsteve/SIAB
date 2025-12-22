@@ -59,6 +59,9 @@ data:
     client_id = "siab-oauth2-proxy"
     # client_secret set via environment variable
 
+    # PKCE support for Keycloak (required by Keycloak 23+)
+    code_challenge_method = "S256"
+
     # Redirect URL - this is where Keycloak sends users after login
     redirect_url = "https://auth.siab.local/oauth2/callback"
 
