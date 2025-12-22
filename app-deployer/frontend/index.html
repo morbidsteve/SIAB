@@ -1670,13 +1670,48 @@
                 const data = await response.json();
                 if (data.success) {
                     currentRepoInfo = data.repo_info || null;
-                    processContent(data.content, data.filename || 'from-git');
+                    // Use backend's detection if available
+                    if (data.detected_type && data.detected_type.type !== 'unknown') {
+                        processContentWithType(data.content, data.filename || 'from-git', data.detected_type);
+                    } else {
+                        processContent(data.content, data.filename || 'from-git');
+                    }
                     showAlert('Content loaded from Git', 'success');
                 } else {
                     showAlert(data.error || 'Failed to fetch from Git', 'error');
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        function processContentWithType(content, filename, backendType) {
+            currentContent = content;
+            currentType = backendType.type;
+            document.getElementById('deployZone').classList.add('has-content');
+            document.getElementById('configCard').style.display = 'block';
+            document.getElementById('detectionBadge').style.display = 'flex';
+
+            // Map backend type to display label
+            const typeLabels = {
+                'dockerfile': 'Dockerfile',
+                'compose': 'Docker Compose',
+                'manifest': 'Kubernetes Manifest',
+                'helm': 'Helm Chart'
+            };
+            document.getElementById('detectedType').textContent = typeLabels[backendType.type] || backendType.type;
+            document.getElementById('detectedDesc').textContent = backendType.description || 'Ready to deploy';
+
+            // Extract app name from linuxserver image
+            if (backendType.base_image) {
+                const lsMatch = backendType.base_image.match(/linuxserver\/([^:]+)/);
+                if (lsMatch) {
+                    const suggestedName = lsMatch[1].replace('docker-', '');
+                    document.getElementById('appName').value = suggestedName;
+                    updateHostname(suggestedName);
+                    // Set default port for linuxserver apps (most use 3000 for web UI)
+                    document.getElementById('containerPort').value = '3000';
+                }
             }
         }
 
@@ -1706,9 +1741,12 @@
                 const services = [...new Set((content.match(/^\s{2}(\w+):/gm) || []).map(m => m.trim().replace(':', '')).filter(s => !['version', 'services', 'volumes', 'networks'].includes(s)))];
                 return { type: 'compose', typeLabel: 'Docker Compose', description: `${services.length} service(s): ${services.slice(0,3).join(', ')}`, suggestedName: services[0] || '' };
             }
-            if ((lower.includes('from ')) && (lower.includes('run ') || lower.includes('cmd ') || lower.includes('copy '))) {
+            if (lower.includes('from ') || fname === 'dockerfile') {
                 const baseImage = (content.match(/FROM\s+([^\s\n]+)/i) || [])[1] || 'unknown';
-                return { type: 'dockerfile', typeLabel: 'Dockerfile', description: `Base: ${baseImage}`, suggestedName: '' };
+                // Extract app name from linuxserver images
+                const lsMatch = baseImage.match(/linuxserver\/([^:]+)/);
+                const suggestedName = lsMatch ? lsMatch[1].replace('docker-', '') : '';
+                return { type: 'dockerfile', typeLabel: 'Dockerfile', description: `Base: ${baseImage}`, suggestedName };
             }
             return { type: 'unknown', typeLabel: 'Unknown Format', description: 'Will attempt raw deployment', suggestedName: '' };
         }

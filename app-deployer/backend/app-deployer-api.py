@@ -229,7 +229,7 @@ spec:
   hosts:
     - "{hostname}"
   gateways:
-    - siab-gateway
+    - user-gateway
   http:
     - route:
         - destination:
