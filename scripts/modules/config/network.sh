@@ -101,7 +101,7 @@ update_hosts_file() {
 
     # Admin plane hosts
     if [[ -n "$admin_ip" ]]; then
-        local admin_hosts="keycloak.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN}"
+        local admin_hosts="keycloak.${SIAB_DOMAIN} grafana.${SIAB_DOMAIN} minio.${SIAB_DOMAIN} k8s-dashboard.${SIAB_DOMAIN}"
 
         for host in $admin_hosts; do
             if ! grep -q "$host" /etc/hosts; then
@@ -112,7 +112,7 @@ update_hosts_file() {
 
     # User plane hosts
     if [[ -n "$user_ip" ]]; then
-        local user_hosts="auth.${SIAB_DOMAIN} deployer.${SIAB_DOMAIN}"
+        local user_hosts="auth.${SIAB_DOMAIN} deployer.${SIAB_DOMAIN} dashboard.${SIAB_DOMAIN} ${SIAB_DOMAIN}"
 
         for host in $user_hosts; do
             if ! grep -q "$host" /etc/hosts; then
