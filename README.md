@@ -13,15 +13,9 @@ Deploy a production-ready, security-hardened Kubernetes environment with integra
 ### One-Command Install
 
 ```bash
-curl -sfL https://raw.githubusercontent.com/morbidsteve/SIAB/main/install.sh | sudo bash
-```
-
-Or clone and install:
-
-```bash
 git clone https://github.com/morbidsteve/SIAB.git
 cd SIAB
-sudo ./install.sh
+sudo ./scripts/install.sh
 ```
 
 **Installation time:** 15-20 minutes
@@ -35,12 +29,12 @@ After installation, you'll have a complete secure platform with:
 
 | Component | Purpose | Access URL |
 |-----------|---------|------------|
+| **SIAB Dashboard** | Platform Overview | https://dashboard.siab.local |
+| **App Deployer** | Application Deployment | https://deployer.siab.local |
 | **Keycloak** | Identity & Access Management | https://keycloak.siab.local |
 | **MinIO** | S3-Compatible Object Storage | https://minio.siab.local |
 | **Grafana** | Monitoring & Dashboards | https://grafana.siab.local |
-| **Longhorn** | Distributed Block Storage | https://longhorn.siab.local |
 | **K8s Dashboard** | Kubernetes Management | https://k8s-dashboard.siab.local |
-| **App Catalog** | One-Click App Deployment | https://catalog.siab.local |
 
 **🔒 All services enforce HTTPS** with automatic HTTP→HTTPS redirects
 
@@ -60,7 +54,7 @@ After installation, you'll have a complete secure platform with:
 - ✅ **Istio Service Mesh** - Traffic management, observability
 - ✅ **Distributed Storage** - Longhorn block + MinIO object storage
 - ✅ **Monitoring Stack** - Prometheus, Grafana, Alertmanager
-- ✅ **Application Catalog** - Pre-configured apps (PostgreSQL, Redis, NGINX, etc.)
+- ✅ **Application Deployer** - Web-based app deployment interface
 - ✅ **Bare Metal Provisioning** - PXE/MAAS integration for automated deployment
 
 ## 📚 Documentation
@@ -224,8 +218,8 @@ k9s
 Access via browser (add to /etc/hosts or configure DNS):
 
 ```
-10.10.30.240  keycloak.siab.local minio.siab.local grafana.siab.local longhorn.siab.local k8s-dashboard.siab.local
-10.10.30.242  catalog.siab.local dashboard.siab.local
+10.10.30.240  keycloak.siab.local grafana.siab.local minio.siab.local k8s-dashboard.siab.local
+10.10.30.242  dashboard.siab.local deployer.siab.local auth.siab.local
 ```
 
 All URLs use HTTPS with automatic HTTP redirects.
@@ -252,7 +246,7 @@ export SIAB_MINIO_SIZE="50Gi"
 
 ### Post-Installation Configuration
 
-See [Advanced Configuration Guide](./docs/ADVANCED-CONFIGURATION.md) for:
+See component documentation for:
 - Custom firewall rules
 - Production TLS certificates (Let's Encrypt)
 - External authentication (LDAP/SAML)
@@ -284,16 +278,16 @@ kubectl logs -n istio-system -l istio=ingress-admin --tail=50
 | Cannot access services | Check firewalld: `sudo ./scripts/configure-firewalld.sh` |
 | HTTP not redirecting | Apply gateway manifests: `kubectl apply -f manifests/istio/gateways.yaml` |
 | Pod connectivity issues | Verify CNI: `kubectl get pods -n kube-system` |
-| Certificate warnings | Expected with self-signed certs (see [Advanced Config](./docs/ADVANCED-CONFIGURATION.md#tls-certificates)) |
+| Certificate warnings | Expected with self-signed certs; use production certs for production |
 
-👉 **[Full Troubleshooting Guide](./docs/TROUBLESHOOTING.md)**
+Run `./siab-diagnose.sh` for automated diagnostics and fixes.
 
 ## 🗑️ Uninstalling SIAB
 
 To completely remove SIAB and return your system to its pre-installation state:
 
 ```bash
-sudo ./uninstall.sh
+sudo ./scripts/uninstall.sh
 ```
 
 **What gets removed:**
@@ -312,7 +306,7 @@ sudo ./uninstall.sh
 
 **Non-interactive mode:**
 ```bash
-SIAB_UNINSTALL_CONFIRM=yes sudo ./uninstall.sh
+sudo SIAB_UNINSTALL_CONFIRM=yes ./scripts/uninstall.sh
 ```
 
 After uninstallation, a system reboot is recommended to ensure all changes take effect.

@@ -3,8 +3,8 @@
 This file tracks ongoing work across Claude Code sessions. Read this at session start.
 
 ## Current Session
-**Last Updated:** 2025-12-22 00:35
-**Status:** Installation verified - all services operational
+**Last Updated:** 2025-12-22 01:20
+**Status:** Repository cleanup and v0.0.9 release completed
 
 ---
 
@@ -19,12 +19,29 @@ _None_
 <!-- Tasks queued but not started -->
 
 - [ ] Fix Trivy scanner job (non-critical, scan job fails but doesn't affect functionality)
-- [ ] Test uninstall with SSH-safe fixes
+- [ ] Test uninstall with SSH-safe fixes on fresh system
+- [ ] Consider updating pinned component versions to latest stable releases
 
 ---
 
 ## Completed
 <!-- Recently completed tasks (keep last 10-15) -->
+
+- [x] Repository cleanup and v0.0.9 release (2025-12-22)
+  - Deleted deprecated root install.sh/uninstall.sh
+  - Removed unused directories: lib/, maas/, operator/, gui/, catalog/
+  - Removed old dashboard files: dashboard/src/, dashboard/backend/
+  - Removed archived directories: docs/archived/, scripts/archived/
+  - Removed redundant scripts at root level
+  - Updated README.md with correct script paths and service URLs
+  - Updated CLAUDE.md with current directory structure and gateway info
+  - Fixed network.sh to place dashboard.siab.local on user gateway
+
+- [x] Fix dashboard/deployer connectivity (2025-12-22)
+  - **Root cause**: user-gateway only accepted `*.apps.siab.local`, not `*.siab.local`
+  - **Fixed**: Updated user-gateway to accept both patterns
+  - **Fixed**: Added missing `/etc/hosts` entries for dashboard.siab.local
+  - All services verified working via HTTPS
 
 - [x] Fix all manifest configs for reliable installs (2025-12-22)
   - **install.sh** - Set SIAB_REPO_DIR to source directory before loading config
@@ -39,26 +56,10 @@ _None_
   - **Fixed in**: `scripts/modules/core/rke2.sh` - new SSH-safe `uninstall_rke2()` function
   - **Fixed in**: `scripts/lib/kubernetes/cleanup.sh` - removed dangerous `fuser -km`
   - **Fixed in**: `scripts/uninstall.sh` - added `ensure_ssh_connectivity()` function
-  - Key changes:
-    - Detect primary network interface before cleanup
-    - Add SSH iptables rules before any network changes
-    - Don't use rke2-killall.sh (too aggressive with iptables)
-    - Re-ensure SSH connectivity after each critical step
-    - Preserve established connections in iptables
-
-- [x] Full end-to-end install testing (2025-12-21)
-  - [x] Created safe-cleanup.sh for SSH-safe cleanup
-  - [x] Fixed Keycloak port-forward bug (port 80 -> 8080)
-  - [x] Fixed missing Keycloak VirtualService
-  - [x] Fixed user-gateway hosts (added *.siab.local)
-  - [x] Fixed deployer-frontend-html ConfigMap (placeholder -> real content)
-  - [x] Fixed deployer-backend-code ConfigMap (placeholder -> real code)
-  - [x] Patched Prometheus to work without Longhorn storage
-  - All endpoints verified working via HTTPS
 
 ---
 
-## Test Results (2025-12-21)
+## Test Results (2025-12-22)
 
 ### Pod Status
 All pods Running/Completed except:
@@ -67,50 +68,52 @@ All pods Running/Completed except:
 ### Admin Gateway (10.10.30.240)
 | Service | Status | URL |
 |---------|--------|-----|
-| Keycloak | ✓ OK | https://keycloak.siab.local |
-| Grafana | ✓ OK | https://grafana.siab.local |
-| MinIO | ✓ OK | https://minio.siab.local |
-| K8s Dashboard | ✓ OK | https://k8s-dashboard.siab.local |
+| Keycloak | OK | https://keycloak.siab.local |
+| Grafana | OK | https://grafana.siab.local |
+| MinIO | OK | https://minio.siab.local |
+| K8s Dashboard | OK | https://k8s-dashboard.siab.local |
 
 ### User Gateway (10.10.30.242)
 | Service | Status | URL |
 |---------|--------|-----|
-| SIAB Dashboard | ✓ OK | https://dashboard.siab.local |
-| Deployer | ✓ OK | https://deployer.siab.local |
+| SIAB Dashboard | OK | https://dashboard.siab.local |
+| Deployer | OK | https://deployer.siab.local |
 
 ---
 
-## Bugs Fixed This Session
+## Version History
 
-1. **Keycloak port-forward** - `scripts/configure-keycloak.sh:43` was using port 80, should be 8080
-2. **Missing Keycloak VirtualService** - No VirtualService was created for Keycloak routing
-3. **User Gateway hosts** - Was configured for `*.apps.siab.local` but VirtualServices use `*.siab.local`
-4. **Deployer ConfigMaps** - Both frontend and backend ConfigMaps had placeholder content
-
----
-
-## Blocked / Needs Attention
-<!-- Tasks that are stuck or need human input -->
-
-_None_
+| Version | Date | Changes |
+|---------|------|---------|
+| v0.0.9 | 2025-12-22 | Fix dashboard/deployer DNS entries for user gateway |
+| v0.0.7 | 2025-12-21 | Modular installer with SSH-safe uninstall |
 
 ---
 
 ## Notes for Next Session
 <!-- Context, gotchas, or reminders for continuity -->
 
-- **All services verified working** (2025-12-22):
-  - Admin Gateway (10.10.30.240): Keycloak, Grafana, MinIO, K8s Dashboard
-  - User Gateway (10.10.30.242): SIAB Dashboard, Deployer (frontend + API)
-- **Uninstall is now SSH-safe** - the full uninstall script preserves SSH connectivity
-- **Install script fixed** - SIAB_REPO_DIR now correctly points to source directory
+- **All services verified working** (2025-12-22)
+- **Repository cleaned up** - removed all deprecated/unused files
+- **Uninstall is SSH-safe** - preserves network connectivity
+- **Install script fixed** - SIAB_REPO_DIR correctly points to source directory
 - Longhorn storage is skipped in current config (Prometheus uses emptyDir)
 - Credentials at `/etc/siab/credentials.env`
-- The `safe-cleanup.sh` script is still useful for quick K8s-only cleanup without removing RKE2
+- The `safe-cleanup.sh` script is useful for quick K8s-only cleanup without removing RKE2
 
 ---
 
 ## Quick Reference
+
+**Install:**
+```bash
+sudo ./scripts/install.sh
+```
+
+**Uninstall:**
+```bash
+sudo SIAB_UNINSTALL_CONFIRM=yes ./scripts/uninstall.sh
+```
 
 **Check system state:**
 ```bash

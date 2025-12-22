@@ -56,9 +56,12 @@ SIAB is a one-command secure Kubernetes platform installer that deploys:
 ├── crds/                   # Custom Resource Definitions
 ├── dashboard/              # SIAB landing page frontend
 ├── app-deployer/           # Application deployment interface
-├── policies/               # OPA Gatekeeper policies
-├── install.sh              # (deprecated) Original monolithic installer
-└── uninstall.sh            # (deprecated) Original monolithic uninstaller
+├── docs/                   # Documentation
+├── examples/               # Example manifests
+├── provisioning/           # Bare metal provisioning (PXE, MAAS, cloud-init)
+├── siab-diagnose.sh        # Diagnostic tool
+├── siab-status.sh          # Status checker
+└── siab-info.sh            # Access information display
 ```
 
 ## Key Configuration
@@ -110,14 +113,18 @@ kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBal
 
 ### Test HTTP Access
 ```bash
-# Get admin gateway IP
+# Get gateway IPs
 ADMIN_IP=$(kubectl get svc istio-ingress-admin -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+USER_IP=$(kubectl get svc istio-ingress-user -n istio-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
-# Test endpoints (use -k for self-signed certs)
-curl -k -H "Host: keycloak.siab.local" https://$ADMIN_IP/
-curl -k -H "Host: grafana.siab.local" https://$ADMIN_IP/
-curl -k -H "Host: minio.siab.local" https://$ADMIN_IP/
-curl -k -H "Host: dashboard.siab.local" https://$ADMIN_IP/
+# Test admin endpoints (use -k for self-signed certs)
+curl -sk --resolve keycloak.siab.local:443:$ADMIN_IP https://keycloak.siab.local/
+curl -sk --resolve grafana.siab.local:443:$ADMIN_IP https://grafana.siab.local/
+curl -sk --resolve minio.siab.local:443:$ADMIN_IP https://minio.siab.local/
+
+# Test user endpoints
+curl -sk --resolve dashboard.siab.local:443:$USER_IP https://dashboard.siab.local/
+curl -sk --resolve deployer.siab.local:443:$USER_IP https://deployer.siab.local/
 ```
 
 ### Check Credentials
@@ -185,11 +192,11 @@ sudo SIAB_UNINSTALL_CONFIRM=yes ./scripts/uninstall.sh
 
 | Service | URL | Gateway |
 |---------|-----|---------|
-| SIAB Dashboard | https://dashboard.siab.local | Admin |
 | Keycloak | https://keycloak.siab.local | Admin |
 | Grafana | https://grafana.siab.local | Admin |
 | MinIO Console | https://minio.siab.local | Admin |
 | K8s Dashboard | https://k8s-dashboard.siab.local | Admin |
+| SIAB Dashboard | https://dashboard.siab.local | User |
 | App Deployer | https://deployer.siab.local | User |
 | Auth (OAuth2) | https://auth.siab.local | User |
 
