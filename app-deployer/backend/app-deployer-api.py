@@ -448,13 +448,14 @@ def detect_content_type(content, filename=''):
         }
 
     # Check for Dockerfile
-    if ('from ' in lower) and ('run ' in lower or 'cmd ' in lower or 'copy ' in lower):
+    if 'from ' in lower:
         from_match = re.search(r'FROM\s+([^\s\n]+)', content, re.IGNORECASE)
-        return {
-            'type': 'dockerfile',
-            'base_image': from_match.group(1) if from_match else 'unknown',
-            'description': f"Dockerfile based on {from_match.group(1) if from_match else 'unknown'}"
-        }
+        if from_match:
+            return {
+                'type': 'dockerfile',
+                'base_image': from_match.group(1),
+                'description': f"Dockerfile based on {from_match.group(1)}"
+            }
 
     # Check for Helm Chart.yaml
     if 'apiversion:' in lower and 'appversion:' in lower and 'name:' in lower:
@@ -831,37 +832,60 @@ def fetch_git():
                     'repo': repo_parts[4]
                 }
 
-                base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/main"
-                files_to_try = [
-                    'kubernetes.yaml', 'k8s.yaml', 'deployment.yaml', 'deploy.yaml',
-                    'docker-compose.yml', 'docker-compose.yaml', 'compose.yaml',
-                    'Dockerfile', 'Chart.yaml'
-                ]
+                # Special handling for linuxserver repos - they always have pre-built images
+                if 'linuxserver' in repo_info['org'].lower():
+                    app_name = repo_info['repo'].replace('docker-', '')
+                    prebuilt_image = f"lscr.io/linuxserver/{app_name}:latest"
 
-                for f in files_to_try:
-                    try:
-                        test_url = f"{base_raw}/{f}"
-                        req = urllib.request.Request(test_url, headers={'User-Agent': 'SIAB-Deployer'})
-                        response = urllib.request.urlopen(req, timeout=10)
-                        content = response.read().decode('utf-8')
-                        filename = f
-                        break
-                    except urllib.error.HTTPError:
-                        continue
+                    # Determine default port based on app type
+                    port_map = {
+                        'nextcloud': 80, 'nginx': 80, 'swag': 443, 'heimdall': 80,
+                        'mariadb': 3306, 'postgres': 5432, 'plex': 32400,
+                        'jellyfin': 8096, 'emby': 8096, 'sonarr': 8989,
+                        'radarr': 7878, 'lidarr': 8686, 'prowlarr': 9696,
+                        'qbittorrent': 8080, 'transmission': 9091,
+                        'code-server': 8443, 'webtop': 3000, 'firefox': 3000,
+                        'chromium': 3000, 'mullvad-browser': 3000,
+                    }
+                    port = port_map.get(app_name, 3000)
 
-                if not content:
-                    # Try master branch
-                    base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/master"
+                    # Return a synthetic Dockerfile that references the pre-built image
+                    content = f"# LinuxServer.io pre-built image\nFROM {prebuilt_image}\n# Default port: {port}"
+                    filename = "Dockerfile"
+                    logger.info(f"LinuxServer repo detected: using pre-built image {prebuilt_image}")
+                else:
+                    base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/main"
+                    files_to_try = [
+                        'kubernetes.yaml', 'k8s.yaml', 'deployment.yaml', 'deploy.yaml',
+                        'docker-compose.yml', 'docker-compose.yaml', 'compose.yaml',
+                        'Dockerfile', 'Chart.yaml',
+                        'root/Dockerfile'  # Common for linuxserver-style repos
+                    ]
+
                     for f in files_to_try:
                         try:
                             test_url = f"{base_raw}/{f}"
                             req = urllib.request.Request(test_url, headers={'User-Agent': 'SIAB-Deployer'})
                             response = urllib.request.urlopen(req, timeout=10)
                             content = response.read().decode('utf-8')
-                            filename = f
+                            filename = f.split('/')[-1]  # Get just the filename
                             break
                         except urllib.error.HTTPError:
                             continue
+
+                    if not content:
+                        # Try master branch
+                        base_raw = f"https://raw.githubusercontent.com/{repo_parts[3]}/{repo_parts[4]}/master"
+                        for f in files_to_try:
+                            try:
+                                test_url = f"{base_raw}/{f}"
+                                req = urllib.request.Request(test_url, headers={'User-Agent': 'SIAB-Deployer'})
+                                response = urllib.request.urlopen(req, timeout=10)
+                                content = response.read().decode('utf-8')
+                                filename = f.split('/')[-1]
+                                break
+                            except urllib.error.HTTPError:
+                                continue
 
         # Direct URL fetch (only for raw file URLs, not repo pages)
         if not content:
