@@ -40,7 +40,7 @@ setup_keycloak_access() {
     sleep 1
 
     # Start port-forward in background
-    kubectl port-forward -n keycloak svc/keycloak ${KEYCLOAK_LOCAL_PORT}:80 >/dev/null 2>&1 &
+    kubectl port-forward -n keycloak svc/keycloak ${KEYCLOAK_LOCAL_PORT}:8080 >/dev/null 2>&1 &
     KEYCLOAK_PORT_FORWARD_PID=$!
 
     # Wait for port-forward to be ready

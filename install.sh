@@ -1309,11 +1309,70 @@ EOF
     log_info "Credentials generated and saved to ${SIAB_CONFIG_DIR}/credentials.env"
 }
 
+# Force delete a stuck terminating namespace by removing finalizers
+force_delete_namespace() {
+    local ns="$1"
+    local phase
+    phase=$(kubectl get namespace "$ns" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+
+    if [[ "$phase" == "Terminating" ]]; then
+        log_info "Force deleting stuck namespace: $ns"
+        # Remove finalizers from all resources in the namespace
+        for resource in $(kubectl api-resources --verbs=list --namespaced -o name 2>/dev/null); do
+            kubectl get "$resource" -n "$ns" -o name 2>/dev/null | while read -r item; do
+                kubectl patch "$item" -n "$ns" --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+            done
+        done
+        # Remove namespace finalizers
+        kubectl get namespace "$ns" -o json 2>/dev/null | \
+            jq '.spec.finalizers = []' | \
+            kubectl replace --raw "/api/v1/namespaces/$ns/finalize" -f - 2>/dev/null || true
+        # Wait for namespace to be deleted
+        local wait_count=0
+        while kubectl get namespace "$ns" &>/dev/null && [[ $wait_count -lt 30 ]]; do
+            sleep 1
+            wait_count=$((wait_count + 1))
+        done
+    fi
+}
+
 # Create namespaces
 create_namespaces() {
     log_step "Creating namespaces..."
 
-    # Create all required namespaces
+    # Clean up stale webhook configurations that might block namespace creation
+    # This handles cases where components like Gatekeeper were partially installed/removed
+    log_info "Cleaning up stale webhook configurations..."
+    kubectl delete validatingwebhookconfiguration -l gatekeeper.sh/system=yes 2>/dev/null || true
+    kubectl delete mutatingwebhookconfiguration -l gatekeeper.sh/system=yes 2>/dev/null || true
+    kubectl delete validatingwebhookconfiguration gatekeeper-validating-webhook-configuration 2>/dev/null || true
+    kubectl delete mutatingwebhookconfiguration gatekeeper-mutating-webhook-configuration 2>/dev/null || true
+
+    # All namespaces used by SIAB (for cleanup of stuck terminating namespaces)
+    local all_namespaces=(
+        "siab-system"
+        "siab-deployer"
+        "siab-dashboard"
+        "keycloak"
+        "minio"
+        "monitoring"
+        "cert-manager"
+        "trivy-system"
+        "gatekeeper-system"
+        "longhorn-system"
+        "istio-system"
+        "metallb-system"
+        "oauth2-proxy"
+        "kubernetes-dashboard"
+    )
+
+    # Force delete any stuck terminating namespaces
+    log_info "Checking for stuck terminating namespaces..."
+    for ns in "${all_namespaces[@]}"; do
+        force_delete_namespace "$ns"
+    done
+
+    # Create required namespaces
     local namespaces=(
         "siab-system"
         "keycloak"
@@ -2701,16 +2760,16 @@ install_dashboard() {
 
     # Deploy dashboard manifests
     if [[ -f "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" ]]; then
-        # Apply the manifest but skip the siab-dashboard-html ConfigMap since we created it above
-        # Use awk to filter out the HTML ConfigMap document
+        # Apply the full manifest - kubectl apply is idempotent
+        # The HTML ConfigMap we created above will be the current state
         sed "s/siab\.local/${SIAB_DOMAIN}/g" "${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml" | \
-            awk '
-                /^---$/ { if (skip) skip=0; print; next }
-                /kind: ConfigMap/ { pending_cm=1 }
-                pending_cm && /name: siab-dashboard-html/ { skip=1; pending_cm=0 }
-                pending_cm && /name:/ { pending_cm=0 }
-                !skip { print }
-            ' | run_quiet kubectl apply -f -
+            run_quiet kubectl apply -f -
+
+        # Re-apply the HTML ConfigMap with actual content to ensure it has the right content
+        kubectl create configmap siab-dashboard-html \
+            --from-literal=index.html="$html_content" \
+            -n siab-dashboard \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
         log_info "Dashboard manifests applied"
     else
         log_warn "Dashboard manifest not found at ${SIAB_REPO_DIR}/manifests/dashboard/siab-dashboard.yaml"
@@ -2807,17 +2866,20 @@ install_deployer() {
     fi
 
     # Apply the deployer manifest with domain substitution
-    # Skip the placeholder ConfigMaps (deployer-backend-code, deployer-frontend-html) since we created them above
     sed "s/siab\.local/${SIAB_DOMAIN}/g" "$deployer_manifest" | \
-        awk '
-            /^---$/ { if (skip) skip=0; print; next }
-            /kind: ConfigMap/ { pending_cm=1 }
-            pending_cm && /name: deployer-backend-code/ { skip=1; pending_cm=0 }
-            pending_cm && /name: deployer-frontend-html/ { skip=1; pending_cm=0 }
-            pending_cm && /name:/ { pending_cm=0 }
-            !skip { print }
-        ' | run_quiet kubectl apply -f -
+        run_quiet kubectl apply -f -
     log_info "Deployer manifests applied"
+
+    # Re-apply ConfigMaps with actual content (manifest may have overwritten with placeholders)
+    local backend_dir="${SIAB_REPO_DIR}/app-deployer/backend"
+    if [[ -f "${backend_dir}/app-deployer-api.py" ]]; then
+        kubectl create configmap deployer-backend-code \
+            --from-file=app-deployer-api.py="${backend_dir}/app-deployer-api.py" \
+            --from-file=requirements.txt="${backend_dir}/requirements.txt" \
+            -n siab-deployer \
+            --dry-run=client -o yaml 2>/dev/null | run_quiet kubectl apply -f -
+        log_info "Backend code ConfigMap updated with actual content"
+    fi
 
     # Wait for deployer to be ready
     log_info "Waiting for SIAB Deployer to be ready..."

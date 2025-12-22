@@ -1,6 +1,11 @@
 ---
 # SIAB Dashboard - Main user-facing dashboard
 # Uses nginx to serve static HTML with Keycloak authentication
+#
+# NOTE: The siab-dashboard-html ConfigMap is created programmatically
+# by siab-apps.sh from dashboard/frontend/index.html.
+# Do NOT add a placeholder ConfigMap here.
+
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -9,19 +14,6 @@ metadata:
     istio-injection: enabled
     app.kubernetes.io/name: siab-dashboard
     app.kubernetes.io/part-of: siab
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: siab-dashboard-html
-  namespace: siab-dashboard
-data:
-  # The index.html content will be created from the dashboard/frontend/index.html
-  # This is a placeholder - the actual content is injected by install.sh
-  index.html: |
-    <!DOCTYPE html>
-    <html><head><title>SIAB Dashboard</title></head>
-    <body><h1>SIAB Dashboard Loading...</h1></body></html>
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -1,6 +1,10 @@
 ---
 # SIAB Application Deployer
 # Complete deployment manifest for the application deployment system
+#
+# NOTE: ConfigMaps for backend code and frontend HTML are created
+# programmatically by siab-apps.sh from the actual source files.
+# Do NOT add placeholder ConfigMaps here as they will overwrite the real ones.
 
 apiVersion: v1
 kind: Namespace
@@ -8,36 +12,6 @@ metadata:
   name: siab-deployer
   labels:
     istio-injection: enabled
-
----
-# ConfigMap for backend code
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: deployer-backend-code
-  namespace: siab-deployer
-data:
-  app-deployer-api.py: |
-    # Content will be populated from backend/app-deployer-api.py
-    # Use: kubectl create configmap deployer-backend-code --from-file=app-deployer-api.py -n siab-deployer
-  requirements.txt: |
-    Flask==3.0.0
-    flask-cors==4.0.0
-    PyYAML==6.0.1
-    requests==2.31.0
-    kubernetes==28.1.0
-
----
-# ConfigMap for frontend
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: deployer-frontend-html
-  namespace: siab-deployer
-data:
-  index.html: |
-    # Content will be populated from frontend/index.html
-    # Use: kubectl create configmap deployer-frontend-html --from-file=index.html -n siab-deployer
 
 ---
 # ServiceAccount with cluster permissions
@@ -385,7 +359,7 @@ data:
     }
 
 ---
-# Istio VirtualService
+# Istio VirtualService - routes API to backend, everything else to frontend
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -397,6 +371,25 @@ spec:
   gateways:
     - user-gateway
   http:
+    # Route /api/* to backend service
+    - match:
+        - uri:
+            prefix: /api/
+      route:
+        - destination:
+            host: app-deployer-backend.siab-deployer.svc.cluster.local
+            port:
+              number: 5000
+    # Route /health to backend (for direct health checks)
+    - match:
+        - uri:
+            exact: /health
+      route:
+        - destination:
+            host: app-deployer-backend.siab-deployer.svc.cluster.local
+            port:
+              number: 5000
+    # Route everything else to frontend
     - route:
         - destination:
             host: app-deployer-frontend.siab-deployer.svc.cluster.local
