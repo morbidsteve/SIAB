@@ -39,21 +39,20 @@ metadata:
 data:
   oauth2-proxy.cfg: |
     # OAuth2 Proxy Configuration for Keycloak OIDC
-    provider = "oidc"
+    provider = "keycloak-oidc"
     provider_display_name = "SIAB Login"
 
     # Skip OIDC auto-discovery since we can't resolve external DNS inside cluster
     skip_oidc_discovery = true
 
-    # Keycloak OIDC endpoints (using internal service URLs)
+    # Keycloak OIDC endpoints
     # The issuer URL must match what Keycloak puts in tokens (external URL)
     oidc_issuer_url = "https://keycloak.siab.local/realms/siab"
 
-    # But actual endpoint calls use internal cluster URLs
+    # Internal cluster URLs - Keycloak is on port 8080
     login_url = "https://keycloak.siab.local/realms/siab/protocol/openid-connect/auth"
-    redeem_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/token"
-    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/certs"
-    profile_url = "http://keycloak.keycloak.svc.cluster.local:80/realms/siab/protocol/openid-connect/userinfo"
+    redeem_url = "http://keycloak.keycloak.svc.cluster.local:8080/realms/siab/protocol/openid-connect/token"
+    oidc_jwks_url = "http://keycloak.keycloak.svc.cluster.local:8080/realms/siab/protocol/openid-connect/certs"
 
     # Client configuration
     client_id = "siab-oauth2-proxy"
@@ -65,26 +64,30 @@ data:
     # Redirect URL - this is where Keycloak sends users after login
     redirect_url = "https://auth.siab.local/oauth2/callback"
 
-    # Cookie configuration
+    # Allow multiple audiences (Keycloak tokens may have different aud values)
+    oidc_extra_audiences = ["account", "siab-oauth2-proxy"]
+    skip_jwt_bearer_tokens = true
+
+    # Cookie configuration - use root domain for cross-subdomain cookies
     cookie_name = "_siab_oauth2"
     cookie_secure = true
     cookie_domains = [".siab.local"]
     cookie_expire = "168h"
-    cookie_refresh = "1h"
     cookie_samesite = "lax"
+    cookie_csrf_per_request = false
+    cookie_csrf_expire = "15m"
 
     # Proxy behavior
     email_domains = ["*"]
     skip_provider_button = true
     reverse_proxy = true
-    real_client_ip_header = "X-Forwarded-For"
+
+    # Don't require groups claim
+    oidc_groups_claim = ""
 
     # Headers to pass upstream
     pass_access_token = true
-    pass_authorization_header = true
-    set_authorization_header = true
     set_xauthrequest = true
-    pass_user_headers = true
 
     # SSL verification for internal communication
     ssl_insecure_skip_verify = true

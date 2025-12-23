@@ -211,13 +211,36 @@ metadata:
     return result['success']
 
 
-def create_ingress_route(namespace, service_name, service_port, hostname=None):
-    """Create Istio VirtualService for the application"""
+def create_ingress_route(namespace, service_name, service_port, hostname=None, gateway="user"):
+    """Create Istio VirtualService for the application
+
+    Args:
+        namespace: Kubernetes namespace
+        service_name: Name of the service
+        service_port: Port number
+        hostname: Optional custom hostname
+        gateway: Gateway to use - "user" (SSO protected), "admin" (no SSO), or "internal" (no external access)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
     if not ISTIO_ENABLED:
+        return True
+
+    # Internal-only apps don't get a VirtualService
+    if gateway == "internal":
+        logger.info(f"Skipping VirtualService for {service_name} - internal only")
         return True
 
     if not hostname:
         hostname = f"{service_name}.{SIAB_DOMAIN}"
+
+    # Map gateway names to Istio gateway resources
+    gateway_map = {
+        "user": "user-gateway",      # SSO protected via OAuth2 Proxy
+        "admin": "admin-gateway",    # No SSO, admin network only
+    }
+    gateway_name = gateway_map.get(gateway, "user-gateway")
 
     virtualservice = f"""
 apiVersion: networking.istio.io/v1beta1
@@ -225,11 +248,14 @@ kind: VirtualService
 metadata:
   name: {service_name}
   namespace: istio-system
+  labels:
+    siab.local/gateway: {gateway}
+    siab.local/app: {service_name}
 spec:
   hosts:
     - "{hostname}"
   gateways:
-    - user-gateway
+    - {gateway_name}
   http:
     - route:
         - destination:
@@ -1126,6 +1152,8 @@ def smart_deploy():
         port = data.get('port', 80)
         helm_values = data.get('helmValues', '')
         repo_info = data.get('repo_info')  # For pre-built image detection
+        # Gateway/exposure selection: "user" (SSO), "admin" (no SSO), "internal" (no external)
+        gateway = data.get('gateway', data.get('exposure', 'user'))
 
         if not name or not content:
             return jsonify({'success': False, 'error': 'Name and content are required'}), 400
@@ -1176,7 +1204,7 @@ def smart_deploy():
                         # Secondary services get subdomains
                         hostname = f"{svc['name']}.{SIAB_DOMAIN}"
 
-                    create_ingress_route(namespace, svc['name'], svc['port'], hostname)
+                    create_ingress_route(namespace, svc['name'], svc['port'], hostname, gateway=gateway)
                     created_routes.append(f"https://{hostname}")
 
                 if created_routes:
@@ -1295,7 +1323,7 @@ def smart_deploy():
         # Ingress/Istio integration
         if integrations.get('ingress'):
             hostname = integrations.get('hostname') or f"{name}.{SIAB_DOMAIN}"
-            create_ingress_route(namespace, service_name, service_port, hostname)
+            create_ingress_route(namespace, service_name, service_port, hostname, gateway=gateway)
             access_url = f"https://{hostname}"
 
         # Keycloak integration (creates AuthorizationPolicy)
@@ -1383,6 +1411,7 @@ spec:
             'message': f'Application {name} deployed successfully',
             'namespace': namespace,
             'access_url': access_url,
+            'gateway': gateway,
             'credentials': credentials_info,
             'integrations': {
                 'istio': integrations.get('istio', True),
@@ -1582,6 +1611,8 @@ def deploy_quick():
         storage_size = data.get('storage_size')
         expose = data.get('expose', False)
         hostname = data.get('hostname')
+        # Gateway/exposure selection: "user" (SSO), "admin" (no SSO), "internal" (no external)
+        gateway = data.get('gateway', data.get('exposure', 'user'))
 
         if not name or not image:
             return jsonify({'error': 'Name and image required'}), 400
@@ -1679,12 +1710,13 @@ def deploy_quick():
 
         # Create ingress if requested
         if expose:
-            create_ingress_route(namespace, name, 80, hostname)
+            create_ingress_route(namespace, name, 80, hostname, gateway=gateway)
 
         return jsonify({
             'success': True,
             'message': f"Application {name} deployed successfully",
-            'access_url': f"https://{hostname or name + '.' + SIAB_DOMAIN}" if expose else None
+            'access_url': f"https://{hostname or name + '.' + SIAB_DOMAIN}" if expose else None,
+            'gateway': gateway if expose else None
         })
     except Exception as e:
         logger.error(f"Quick deploy error: {str(e)}")

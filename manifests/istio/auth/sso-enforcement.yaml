@@ -35,6 +35,8 @@ spec:
         name: envoy.filters.http.ext_authz
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+          failure_mode_allow: false
+          transport_api_version: V3
           http_service:
             server_uri:
               uri: http://oauth2-proxy.oauth2-proxy.svc.cluster.local:80
@@ -42,15 +44,20 @@ spec:
               timeout: 10s
             path_prefix: "/oauth2/auth"
             authorization_request:
+              # Add headers from original request to auth request
+              headers_to_add:
+              - key: x-forwarded-host
+                value: "%REQ(:authority)%"
+              - key: x-forwarded-uri
+                value: "%REQ(:path)%"
+              - key: x-forwarded-proto
+                value: "%REQ(:scheme)%"
               allowed_headers:
                 patterns:
                 - exact: "cookie"
                 - exact: "authorization"
-                - exact: "x-forwarded-for"
-                - exact: "x-forwarded-host"
-                - exact: "x-forwarded-proto"
-                - exact: "x-forwarded-uri"
             authorization_response:
+              # Headers to pass to upstream when auth succeeds (200)
               allowed_upstream_headers:
                 patterns:
                 - exact: "authorization"
@@ -58,10 +65,21 @@ spec:
                 - exact: "x-auth-request-email"
                 - exact: "x-auth-request-groups"
                 - exact: "x-auth-request-access-token"
-          failure_mode_allow: false
+                - exact: "set-cookie"
+              # Headers to send to client when auth fails (401/403)
+              allowed_client_headers:
+                patterns:
+                - exact: "set-cookie"
+                - exact: "location"
+                - exact: "www-authenticate"
+                - exact: "content-type"
+              # Also allow appending cookies on success
+              allowed_client_headers_on_success:
+                patterns:
+                - exact: "set-cookie"
+          clear_route_cache: true
           status_on_error:
             code: 503
-          clear_route_cache: true
 ---
 # EnvoyFilter to bypass ext_authz for auth.siab.local (OAuth2 Proxy endpoints)
 # This prevents redirect loops during the OAuth2 callback flow
