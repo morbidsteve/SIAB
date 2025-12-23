@@ -74,7 +74,9 @@ data:
     cookie_domains = [".siab.local"]
     cookie_expire = "168h"
     cookie_samesite = "lax"
-    cookie_csrf_per_request = false
+
+    # Use per-request CSRF cookie - prevents CSRF mismatch when users have stale sessions
+    cookie_csrf_per_request = true
     cookie_csrf_expire = "15m"
 
     # Proxy behavior
@@ -95,15 +97,11 @@ data:
     # Upstreams (use with ext_authz)
     upstreams = ["static://200"]
 
-    # Skip authentication for these paths ONLY
-    # DO NOT skip /oauth2/auth - that's the ext_authz check endpoint
+    # Skip authentication for health check paths only
     skip_auth_routes = [
       "^/health$",
       "^/ping$",
-      "^/ready$",
-      "^/oauth2/callback",
-      "^/oauth2/sign_out",
-      "^/oauth2/start"
+      "^/ready$"
     ]
 
     # Logging
