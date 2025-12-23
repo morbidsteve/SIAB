@@ -85,6 +85,9 @@ data:
     skip_provider_button = true
     reverse_proxy = true
 
+    # Whitelist domains for redirect validation
+    whitelist_domains = [".siab.local"]
+
     # Don't require groups claim
     oidc_groups_claim = ""
 
