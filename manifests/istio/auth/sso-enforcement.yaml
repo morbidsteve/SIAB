@@ -20,6 +20,52 @@ spec:
     labels:
       istio: ingress-user
   configPatches:
+  # Lua filter to redirect non-auth hosts through auth.siab.local/oauth2/start
+  # This ensures CSRF cookies are set on the same domain as the callback
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+            subFilter:
+              name: "envoy.filters.http.router"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          default_source_code:
+            inline_string: |
+              function envoy_on_request(request_handle)
+                -- Store the original host for use in response
+                local host = request_handle:headers():get(":authority")
+                request_handle:streamInfo():dynamicMetadata():set("lua", "original_host", host)
+              end
+
+              function envoy_on_response(response_handle)
+                local status = response_handle:headers():get(":status")
+                local location = response_handle:headers():get("location")
+
+                -- Get the original request host
+                local original_host = response_handle:streamInfo():dynamicMetadata():get("lua")
+                if original_host then
+                  original_host = original_host["original_host"]
+                end
+
+                -- Only modify if NOT from auth.siab.local and is a redirect to Keycloak
+                if original_host and original_host ~= "auth.siab.local" then
+                  if status == "302" and location and string.find(location, "keycloak.siab.local") then
+                    -- Redirect to auth.siab.local/oauth2/start instead
+                    local rd = "https://" .. original_host .. "/"
+                    local new_location = "https://auth.siab.local/oauth2/start?rd=" .. rd
+                    response_handle:headers():replace("location", new_location)
+                  end
+                end
+              end
+  # External authorization filter for OAuth2 Proxy
   - applyTo: HTTP_FILTER
     match:
       context: GATEWAY
@@ -86,7 +132,7 @@ spec:
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: oauth2-bypass-auth-host
+  name: disable-authz-for-oauth2
   namespace: istio-system
 spec:
   workloadSelector:
@@ -94,7 +140,7 @@ spec:
       istio: ingress-user
   configPatches:
   # Add per-route config to disable ext_authz for auth.siab.local
-  - applyTo: VIRTUAL_HOST
+  - applyTo: HTTP_ROUTE
     match:
       context: GATEWAY
       routeConfiguration:
