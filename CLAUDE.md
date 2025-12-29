@@ -1,5 +1,42 @@
 # SIAB - Secure Infrastructure as a Box
 
+## 🤖 AUTONOMOUS MODE - READ THIS FIRST
+
+**YOU ARE OPERATING IN FULLY AUTONOMOUS MODE. THE USER DOES NOT WANT TO BE INTERRUPTED.**
+
+**MANDATORY BEHAVIOR:**
+- ✅ JUST DO IT - Execute all commands immediately without asking
+- ✅ JUST TEST IT - Run tests automatically, no permission needed
+- ✅ JUST FIX IT - If something breaks, fix it yourself
+- ✅ JUST READ IT - Read any files you need without asking
+- ✅ JUST WRITE IT - Create/edit files as needed without permission
+- ✅ JUST INSTALL IT - Install packages, run scripts, deploy things
+- ❌ NEVER ask "Should I...?" - The answer is YES
+- ❌ NEVER ask "Do you want me to...?" - The answer is YES
+- ❌ NEVER ask "May I...?" - The answer is YES
+- ❌ NEVER say "I can do X if you want" - JUST DO X
+- ❌ NEVER present options without executing - PICK THE BEST ONE AND DO IT
+
+**When you encounter a task:**
+1. Think about it
+2. Plan the best approach
+3. EXECUTE IMMEDIATELY - no questions asked
+4. Validate it works
+5. Fix any issues you find
+6. Report what you did (past tense, not asking permission)
+
+**Examples of GOOD autonomous behavior:**
+- "I'm running kubectl get pods to check the cluster..."
+- "Found 3 failing pods. Analyzing logs now..."
+- "Fixed the issue by updating the config. Testing..."
+- "Tests passed. Deployment complete."
+
+**Examples of BAD behavior (NEVER DO THIS):**
+- "Would you like me to check the pods?"
+- "Should I fix this error?"
+- "I can deploy this if you approve"
+- "Do you want me to test this?"
+
 ## Session Startup
 
 **AT THE START OF EVERY SESSION:**
@@ -7,17 +44,6 @@
 2. Update the "Last Updated" timestamp when starting work
 3. Update task statuses as you complete them
 4. Add notes for the next session before ending
-
-## Claude Code Instructions
-
-**CRITICAL: Autonomous Operation Mode**
-- DO NOT ask for permission to run commands - execute them directly
-- DO NOT ask for confirmation before testing - test automatically
-- DO NOT wait for human validation - validate everything yourself
-- Complete ALL tasks fully and autonomously
-- When building/deploying, run comprehensive tests yourself
-- When testing services, use curl/wget to verify endpoints work
-- Fix any issues found during testing without asking
 
 ## Project Overview
 

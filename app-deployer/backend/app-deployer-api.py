@@ -53,6 +53,7 @@ SIAB_DOMAIN = os.getenv('SIAB_DOMAIN', 'siab.local')
 KEYCLOAK_ENABLED = os.getenv('KEYCLOAK_ENABLED', 'true').lower() == 'true'
 ISTIO_ENABLED = os.getenv('ISTIO_ENABLED', 'true').lower() == 'true'
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'minio.minio.svc.cluster.local:9000')
+INTERNAL_REGISTRY = os.getenv('INTERNAL_REGISTRY', 'docker-registry.docker-registry.svc.cluster.local:5000')
 
 # Ensure directories exist
 os.makedirs(APPS_DIR, exist_ok=True)
@@ -84,6 +85,248 @@ def run_command(cmd, input_data=None):
             'stderr': str(e),
             'returncode': -1
         }
+
+
+def build_and_push_image_kaniko(dockerfile_content, context_files, image_name, build_args=None):
+    """
+    Build and push Docker image using Kaniko in-cluster builder.
+
+    Args:
+        dockerfile_content: Content of the Dockerfile
+        context_files: Dict of {filename: content} for additional context files
+        image_name: Full image name (registry/repo:tag)
+        build_args: Dict of build arguments
+
+    Returns:
+        tuple: (success: bool, message: str, image: str)
+    """
+    try:
+        build_id = hashlib.md5(image_name.encode()).hexdigest()[:8]
+        build_namespace = "siab-deployer"
+        job_name = f"build-{build_id}"
+
+        # Create ConfigMap with Dockerfile and context
+        configmap_data = {
+            'Dockerfile': dockerfile_content
+        }
+        if context_files:
+            configmap_data.update(context_files)
+
+        configmap = {
+            'apiVersion': 'v1',
+            'kind': 'ConfigMap',
+            'metadata': {
+                'name': f"build-context-{build_id}",
+                'namespace': build_namespace
+            },
+            'data': configmap_data
+        }
+
+        # Apply ConfigMap
+        result = run_command(f"kubectl apply -f -", input_data=yaml.dump(configmap))
+        if not result['success']:
+            return False, f"Failed to create build context: {result['stderr']}", None
+
+        # Build args for kaniko
+        build_arg_flags = ""
+        if build_args:
+            for key, value in build_args.items():
+                build_arg_flags += f"--build-arg {key}={value} "
+
+        # Create Kaniko build Job
+        kaniko_job = {
+            'apiVersion': 'batch/v1',
+            'kind': 'Job',
+            'metadata': {
+                'name': job_name,
+                'namespace': build_namespace
+            },
+            'spec': {
+                'ttlSecondsAfterFinished': 300,
+                'backoffLimit': 1,
+                'template': {
+                    'metadata': {
+                        'labels': {
+                            'app': 'kaniko-builder'
+                        }
+                    },
+                    'spec': {
+                        'restartPolicy': 'Never',
+                        'containers': [{
+                            'name': 'kaniko',
+                            'image': 'gcr.io/kaniko-project/executor:latest',
+                            'args': [
+                                f"--dockerfile=/workspace/Dockerfile",
+                                f"--context=/workspace",
+                                f"--destination={image_name}",
+                                "--insecure",
+                                "--skip-tls-verify",
+                                "--cache=false"
+                            ] + ([build_arg_flags] if build_arg_flags else []),
+                            'volumeMounts': [{
+                                'name': 'build-context',
+                                'mountPath': '/workspace'
+                            }],
+                            'resources': {
+                                'requests': {
+                                    'cpu': '500m',
+                                    'memory': '512Mi'
+                                },
+                                'limits': {
+                                    'cpu': '2',
+                                    'memory': '2Gi'
+                                }
+                            }
+                        }],
+                        'volumes': [{
+                            'name': 'build-context',
+                            'configMap': {
+                                'name': f"build-context-{build_id}"
+                            }
+                        }]
+                    }
+                }
+            }
+        }
+
+        # Apply Job
+        result = run_command(f"kubectl apply -f -", input_data=yaml.dump(kaniko_job))
+        if not result['success']:
+            return False, f"Failed to create build job: {result['stderr']}", None
+
+        logger.info(f"Started build job {job_name} for image {image_name}")
+
+        # Wait for job to complete (with timeout)
+        logger.info(f"Waiting for build to complete...")
+        wait_cmd = f"kubectl wait --for=condition=complete --timeout=600s job/{job_name} -n {build_namespace}"
+        result = run_command(wait_cmd)
+
+        # Check job status
+        if result['success']:
+            logger.info(f"Build completed successfully: {image_name}")
+            # Cleanup
+            run_command(f"kubectl delete job {job_name} -n {build_namespace} --ignore-not-found=true")
+            run_command(f"kubectl delete configmap build-context-{build_id} -n {build_namespace} --ignore-not-found=true")
+            return True, f"Image built and pushed successfully", image_name
+        else:
+            # Get pod logs for debugging
+            logs_cmd = f"kubectl logs -n {build_namespace} -l job-name={job_name} --tail=50"
+            logs_result = run_command(logs_cmd)
+            error_msg = f"Build failed. Logs:\n{logs_result.get('stdout', 'No logs available')}"
+            logger.error(error_msg)
+            return False, error_msg, None
+
+    except Exception as e:
+        logger.error(f"Build failed with exception: {str(e)}")
+        return False, str(e), None
+
+
+def clone_and_build_from_github(github_url, app_name, build_args=None):
+    """
+    Clone GitHub repo, detect Dockerfile or docker-compose, build and push to registry.
+    For LinuxServer.io repos, uses pre-built images to avoid build complexity.
+
+    Args:
+        github_url: GitHub repository URL
+        app_name: Application name (used for image tagging)
+        build_args: Optional dict of build arguments
+
+    Returns:
+        tuple: (success: bool, message: str, images: list, compose_content: str)
+    """
+    try:
+        # Parse GitHub URL
+        match = re.search(r'github\.com/([^/]+)/([^/]+?)(?:\.git|/|$)', github_url)
+        if not match:
+            return False, "Invalid GitHub URL", [], None
+
+        org, repo = match.groups()
+
+        # Special handling for LinuxServer.io repositories - use pre-built images
+        if org.lower() == 'linuxserver':
+            app_from_repo = repo.replace('docker-', '').replace('_', '-')
+            prebuilt_image = f"lscr.io/linuxserver/{app_from_repo}:latest"
+            logger.info(f"LinuxServer repo detected for {app_from_repo}")
+            logger.info(f"Using pre-built image: {prebuilt_image}")
+            logger.info(f"App will be deployed with LinuxServer env vars (PUID=1000, PGID=1000, TZ=UTC)")
+            return True, f"Using LinuxServer pre-built image: {prebuilt_image}", [{'service': app_name, 'image': prebuilt_image}], None
+
+        # Scan repository for deployment files
+        files = scan_github_repo(org, repo)
+        if not files:
+            return False, "No Dockerfile or docker-compose.yml found in repository", [], None
+
+        # Prioritize: docker-compose > Dockerfile
+        compose_file = next((f for f in files if f['type'] == 'compose'), None)
+        dockerfile = next((f for f in files if f['type'] == 'dockerfile'), None)
+
+        if compose_file:
+            # Handle docker-compose
+            compose_content = fetch_github_file(org, repo, compose_file['path'])
+            if not compose_content:
+                return False, f"Failed to fetch {compose_file['path']}", [], None
+
+            # Parse docker-compose and build referenced Dockerfiles
+            try:
+                compose_data = yaml.safe_load(compose_content)
+                services = compose_data.get('services', {})
+                built_images = []
+
+                for service_name, service_config in services.items():
+                    build_config = service_config.get('build')
+                    if build_config:
+                        # Has build context
+                        if isinstance(build_config, str):
+                            dockerfile_path = f"{build_config}/Dockerfile"
+                        else:
+                            context = build_config.get('context', '.')
+                            dockerfile_name = build_config.get('dockerfile', 'Dockerfile')
+                            dockerfile_path = f"{context}/{dockerfile_name}"
+
+                        # Fetch Dockerfile
+                        dockerfile_content = fetch_github_file(org, repo, dockerfile_path)
+                        if dockerfile_content:
+                            image_name = f"{INTERNAL_REGISTRY}/{app_name}-{service_name}:latest"
+                            success, msg, image = build_and_push_image_kaniko(
+                                dockerfile_content,
+                                {},
+                                image_name,
+                                build_args
+                            )
+                            if success:
+                                built_images.append({'service': service_name, 'image': image})
+                            else:
+                                logger.warning(f"Failed to build {service_name}: {msg}")
+
+                return True, f"Built {len(built_images)} images from docker-compose", built_images, compose_content
+
+            except Exception as e:
+                return False, f"Failed to parse docker-compose.yml: {str(e)}", [], compose_content
+
+        elif dockerfile:
+            # Handle single Dockerfile
+            dockerfile_content = fetch_github_file(org, repo, dockerfile['path'])
+            if not dockerfile_content:
+                return False, f"Failed to fetch {dockerfile['path']}", [], None
+
+            image_name = f"{INTERNAL_REGISTRY}/{app_name}:latest"
+            success, msg, image = build_and_push_image_kaniko(
+                dockerfile_content,
+                {},
+                image_name,
+                build_args
+            )
+
+            if success:
+                return True, msg, [{'service': app_name, 'image': image}], None
+            else:
+                return False, msg, [], None
+
+        return False, "No suitable deployment files found", [], None
+
+    except Exception as e:
+        logger.error(f"GitHub build failed: {str(e)}")
+        return False, str(e), [], None
 
 
 def configure_firewalld_for_app(namespace, app_name):
@@ -775,6 +1018,25 @@ def check_prebuilt_image(dockerfile_content, repo_info=None):
 
 def create_deployment_from_image(name, image, namespace, port=8080, env_vars=None):
     """Create deployment from a pre-built image"""
+
+    # Set resource limits based on image type
+    resources = {
+        'requests': {
+            'cpu': '100m',
+            'memory': '256Mi'
+        },
+        'limits': {
+            'cpu': '1000m',
+            'memory': '1Gi'
+        }
+    }
+
+    # LinuxServer images need more resources (GUI apps)
+    if 'linuxserver' in image.lower():
+        resources['limits']['memory'] = '2Gi'
+        resources['limits']['cpu'] = '2000m'
+        logger.info(f"LinuxServer image detected, setting higher resources: {resources}")
+
     deployment = {
         'apiVersion': 'apps/v1',
         'kind': 'Deployment',
@@ -808,7 +1070,8 @@ def create_deployment_from_image(name, image, namespace, port=8080, env_vars=Non
                             'containerPort': port,
                             'name': 'http'
                         }],
-                        'env': env_vars or []
+                        'env': env_vars or [],
+                        'resources': resources
                     }],
                     'securityContext': {
                         'fsGroup': 1000
@@ -1594,6 +1857,145 @@ def deploy_dockerfile():
         })
     except Exception as e:
         logger.error(f"Deploy dockerfile error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/deploy/github-auto', methods=['POST'])
+def deploy_github_auto():
+    """Auto-build and deploy from GitHub repository"""
+    try:
+        data = request.get_json()
+        github_url = data.get('url', '').strip()
+        name = data.get('name')
+        namespace = data.get('namespace', 'default')
+        port = data.get('port', 80)
+        build_args = data.get('build_args', {})
+
+        # Integration options
+        enable_istio = data.get('enable_istio', True)
+        enable_storage = data.get('enable_storage', False)
+        storage_size = data.get('storage_size', '10Gi')
+        gateway = data.get('gateway', 'user')
+
+        if not github_url:
+            return jsonify({'error': 'GitHub URL required'}), 400
+
+        # Extract repo name if name not provided
+        if not name:
+            match = re.search(r'github\.com/[^/]+/([^/]+?)(?:\.git|/|$)', github_url)
+            if match:
+                name = match.group(1).lower().replace('_', '-')
+            else:
+                return jsonify({'error': 'Could not determine app name from URL'}), 400
+
+        # Validate name
+        if not re.match(r'^[a-z0-9-]+$', name):
+            return jsonify({'error': 'Name must be lowercase alphanumeric with hyphens'}), 400
+
+        logger.info(f"Starting GitHub auto-build for {github_url}")
+
+        # Build images from GitHub
+        success, message, images, compose_content = clone_and_build_from_github(
+            github_url, name, build_args
+        )
+
+        if not success or not images:
+            return jsonify({'success': False, 'error': message}), 500
+
+        logger.info(f"Successfully built {len(images)} images: {images}")
+        logger.info(f"Deploying {name} to namespace {namespace} on port {port} via {gateway} gateway")
+
+        # Ensure namespace exists
+        ensure_namespace(namespace)
+
+        # Deploy the built images
+        deployed_services = []
+
+        if compose_content:
+            # Deploy from docker-compose with built images
+            compose_data = yaml.safe_load(compose_content)
+
+            # Replace build contexts with built images
+            for service_name, service_config in compose_data.get('services', {}).items():
+                built_image = next((img['image'] for img in images if img['service'] == service_name), None)
+                if built_image:
+                    service_config['image'] = built_image
+                    if 'build' in service_config:
+                        del service_config['build']
+
+            # Convert to Kubernetes manifests
+            manifests, error = convert_compose_to_k8s(compose_content, name, namespace)
+            if error:
+                return jsonify({'success': False, 'error': error}), 500
+
+            # Apply manifests
+            for manifest in manifests:
+                yaml_content = yaml.dump(manifest)
+                result = run_command('kubectl apply -f -', input_data=yaml_content)
+                deployed_services.append({
+                    'kind': manifest['kind'],
+                    'name': manifest['metadata']['name'],
+                    'success': result['success']
+                })
+        else:
+            # Single service deployment
+            image = images[0]['image']
+
+            # Add LinuxServer env vars if it's a LinuxServer image
+            # Note: Don't set CUSTOM_USER/PASSWORD since OAuth2 Proxy handles authentication
+            env_vars = []
+            if 'linuxserver' in image.lower():
+                env_vars = [
+                    {'name': 'PUID', 'value': '1000'},
+                    {'name': 'PGID', 'value': '1000'},
+                    {'name': 'TZ', 'value': 'UTC'}
+                ]
+                logger.info(f"Adding LinuxServer env vars for {name}: {env_vars}")
+
+            manifests, error = create_deployment_from_image(
+                name, image, namespace, port, env_vars
+            )
+
+            if error:
+                return jsonify({'success': False, 'error': error}), 500
+
+            # Apply manifests
+            for manifest in manifests:
+                yaml_content = yaml.dump(manifest)
+                result = run_command('kubectl apply -f -', input_data=yaml_content)
+                deployed_services.append({
+                    'kind': manifest['kind'],
+                    'name': manifest['metadata']['name'],
+                    'success': result['success']
+                })
+
+        # Apply integrations if enabled
+        url = None
+        if enable_istio:
+            configure_istio_for_app(namespace, name, port)
+            # VirtualService should route to service port (80), not container port
+            create_ingress_route(namespace, name, 80, hostname=None, gateway=gateway)
+            url = f"https://{name}.{SIAB_DOMAIN}"
+            logger.info(f"Created VirtualService for {name} on gateway: {gateway}")
+            logger.info(f"Access URL: {url}")
+
+        if enable_storage:
+            create_pvc(name, namespace, storage_size, '/data')
+
+        # Configure firewall
+        configure_firewalld_for_app(namespace, name)
+
+        return jsonify({
+            'success': True,
+            'message': f"Successfully built and deployed {name} from GitHub",
+            'images': images,
+            'deployed_services': deployed_services,
+            'url': url,
+            'namespace': namespace
+        })
+
+    except Exception as e:
+        logger.error(f"GitHub auto-deploy error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

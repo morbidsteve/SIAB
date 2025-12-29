@@ -1036,6 +1036,83 @@
                 font-size: 1.5rem;
             }
         }
+
+        /* Tooltips */
+        [data-tooltip] {
+            position: relative;
+            cursor: help;
+        }
+
+        [data-tooltip]::before,
+        [data-tooltip]::after {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 1000;
+        }
+
+        [data-tooltip]::before {
+            content: attr(data-tooltip);
+            background: var(--gray-900);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            white-space: normal;
+            max-width: 300px;
+            width: max-content;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            box-shadow: var(--shadow-lg);
+            line-height: 1.4;
+        }
+
+        [data-tooltip]::after {
+            content: '';
+            border: 6px solid transparent;
+            border-top-color: var(--gray-900);
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        [data-tooltip]:hover::before,
+        [data-tooltip]:hover::after {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        [data-theme="dark"] [data-tooltip]::before {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+
+        [data-theme="dark"] [data-tooltip]::after {
+            border-top-color: var(--gray-100);
+        }
+
+        /* Tooltip icon */
+        .tooltip-icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            line-height: 16px;
+            text-align: center;
+            background: var(--gray-300);
+            color: var(--gray-700);
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 6px;
+            cursor: help;
+        }
+
+        [data-theme="dark"] .tooltip-icon {
+            background: var(--gray-600);
+            color: var(--gray-300);
+        }
     </style>
 </head>
 <body>
@@ -1177,8 +1254,13 @@
                     </div>
 
                     <div class="git-input-row">
-                        <input type="text" id="gitUrl" placeholder="https://github.com/user/repo or raw file URL" onkeypress="if(event.key==='Enter')loadFromGit()">
-                        <button class="btn" onclick="loadFromGit()">&#128279; Load from Git</button>
+                        <input type="text" id="gitUrl" placeholder="https://github.com/user/repo - Auto-builds from Dockerfile or docker-compose!" onkeypress="if(event.key==='Enter')loadFromGit()">
+                        <button class="btn" onclick="loadFromGit()" data-tooltip="Paste any GitHub repo URL. I'll automatically detect Dockerfiles or docker-compose, build the images, push to internal registry, and deploy!">&#128279; Load & Auto-Build</button>
+                    </div>
+                    <div class="help-text" style="margin-top: 8px; text-align: center;">
+                        <span data-tooltip="The deployer will scan the repo, build any Dockerfiles, push to internal registry, and automatically deploy with full platform integration.">
+                            &#128161; Just drop a GitHub link - I'll handle the building and deployment automatically!
+                        </span>
                     </div>
                 </div>
 
@@ -1197,12 +1279,18 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="appName">Application Name <span class="required">*</span></label>
+                            <label for="appName">
+                                Application Name <span class="required">*</span>
+                                <span class="tooltip-icon" data-tooltip="Unique identifier for your app. Used for DNS (appname.siab.local) and Kubernetes resources. Must be lowercase alphanumeric with hyphens.">?</span>
+                            </label>
                             <input type="text" id="appName" placeholder="my-app" pattern="[a-z0-9-]+" required>
                             <div class="help-text">Lowercase letters, numbers, and hyphens only</div>
                         </div>
                         <div class="form-group">
-                            <label for="namespace">Namespace</label>
+                            <label for="namespace">
+                                Namespace
+                                <span class="tooltip-icon" data-tooltip="Kubernetes namespace for resource isolation. Creates a new namespace if it doesn't exist. Use 'default' for simple deployments.">?</span>
+                            </label>
                             <select id="namespace">
                                 <option value="default">default</option>
                             </select>
@@ -1221,7 +1309,10 @@
                         </div>
                     </div>
 
-                    <h4 style="margin: 24px 0 16px; color: var(--text); font-weight: 600;">&#128279; Network Exposure</h4>
+                    <h4 style="margin: 24px 0 16px; color: var(--text); font-weight: 600;">
+                        &#128279; Network Exposure
+                        <span class="tooltip-icon" data-tooltip="Choose how your application is exposed to users. User gateway adds Keycloak SSO protection, Admin has no authentication, and Internal is cluster-only.">?</span>
+                    </h4>
                     <div class="form-group">
                         <label>Gateway / Exposure Mode</label>
                         <div style="display: flex; gap: 12px; margin-top: 8px;">
@@ -1253,9 +1344,12 @@
                         <div class="help-text">User gateway requires SSO. Admin gateway has no auth. Internal is cluster-only.</div>
                     </div>
 
-                    <h4 style="margin: 24px 0 16px; color: var(--text); font-weight: 600;">&#9881; Platform Integrations</h4>
+                    <h4 style="margin: 24px 0 16px; color: var(--text); font-weight: 600;">
+                        &#9881; Platform Integrations
+                        <span class="tooltip-icon" data-tooltip="Enable automatic integration with SIAB platform services. These add enterprise features like storage, security, and networking to your app.">?</span>
+                    </h4>
                     <div class="toggle-group">
-                        <div class="toggle-row">
+                        <div class="toggle-row" data-tooltip="Creates an Istio VirtualService to expose your app at https://appname.siab.local with automatic TLS certificates.">
                             <div class="toggle-label">
                                 <span>&#127760; HTTPS Ingress</span>
                                 <small>Expose via https://[app].siab.local with TLS</small>
@@ -1265,7 +1359,7 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="toggle-row">
+                        <div class="toggle-row" data-tooltip="Injects Istio sidecar proxy for mTLS encryption, intelligent traffic routing, circuit breaking, and observability metrics.">
                             <div class="toggle-label">
                                 <span>&#128737; Istio Service Mesh</span>
                                 <small>mTLS, traffic management, observability</small>
@@ -1275,7 +1369,7 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="toggle-row">
+                        <div class="toggle-row" data-tooltip="Creates a Longhorn PersistentVolumeClaim for data that persists across pod restarts. Specify size and mount path below.">
                             <div class="toggle-label">
                                 <span>&#128190; Persistent Storage</span>
                                 <small>Longhorn distributed block storage</small>
@@ -1285,7 +1379,7 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="toggle-row">
+                        <div class="toggle-row" data-tooltip="Provisions a dedicated S3-compatible bucket in MinIO with auto-generated credentials. Perfect for apps that need object storage.">
                             <div class="toggle-label">
                                 <span>&#128451; MinIO Object Storage</span>
                                 <small>S3-compatible bucket with credentials</small>
@@ -1295,7 +1389,7 @@
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
-                        <div class="toggle-row">
+                        <div class="toggle-row" data-tooltip="Creates a Keycloak OIDC client for your app and configures SSO authentication. Users must log in with Keycloak credentials to access.">
                             <div class="toggle-label">
                                 <span>&#128274; Keycloak Authentication</span>
                                 <small>Require SSO login to access application</small>
@@ -1577,9 +1671,15 @@
                 if (radio && radio.checked) {
                     option.style.borderColor = 'var(--primary)';
                     option.style.background = 'rgba(99, 102, 241, 0.1)';
+                    // Auto-enable Keycloak for User (SSO) gateway
+                    if (radio.value === 'user' && radio.name === 'gateway') {
+                        const keycloakToggle = document.getElementById('enableKeycloak');
+                        if (keycloakToggle) keycloakToggle.checked = true;
+                    }
                 }
                 option.addEventListener('click', () => {
                     const name = radio.name;
+                    const value = radio.value;
                     // Clear all options in this group
                     document.querySelectorAll(`input[name="${name}"]`).forEach(r => {
                         r.checked = false;
@@ -1590,6 +1690,18 @@
                     radio.checked = true;
                     option.style.borderColor = 'var(--primary)';
                     option.style.background = 'rgba(99, 102, 241, 0.1)';
+
+                    // Auto-enable/disable Keycloak based on gateway selection (only for main deploy form)
+                    if (name === 'gateway') {
+                        const keycloakToggle = document.getElementById('enableKeycloak');
+                        if (keycloakToggle) {
+                            if (value === 'user') {
+                                keycloakToggle.checked = true;
+                            } else {
+                                keycloakToggle.checked = false;
+                            }
+                        }
+                    }
                 });
             });
         }
@@ -1739,9 +1851,22 @@
             reader.readAsText(file);
         }
 
+        // Store GitHub URL for deployment
+        let currentGithubUrl = null;
+
         async function loadFromGit() {
             const url = document.getElementById('gitUrl').value.trim();
             if (!url) { showAlert('Please enter a Git URL', 'error'); return; }
+
+            // Check if it's a GitHub repository URL (not a raw file)
+            const githubRepoMatch = url.match(/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git|\/|$)/);
+            if (githubRepoMatch && !url.includes('raw.githubusercontent.com') && !url.includes('/blob/')) {
+                // This is a GitHub repo - prepare for auto-build
+                await prepareGitHubRepoDeploy(url);
+                return;
+            }
+
+            // Otherwise, fetch content as before
             showAlert('Fetching from Git...', 'info');
             try {
                 const response = await fetch(`${API_BASE}/api/fetch-git`, {
@@ -1764,6 +1889,110 @@
                 }
             } catch (error) {
                 showAlert('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function prepareGitHubRepoDeploy(githubUrl) {
+            showAlert('📦 Preparing GitHub repository for deployment...', 'info');
+
+            // Extract repo name for suggested app name
+            const match = githubUrl.match(/github\.com\/[^\/]+\/([^\/]+?)(?:\.git|\/|$)/);
+            const suggestedName = match ? match[1].toLowerCase().replace(/^docker-/, '').replace(/_/g, '-') : '';
+
+            // Store GitHub URL for later deployment
+            currentGithubUrl = githubUrl;
+
+            // Populate form with defaults
+            document.getElementById('appName').value = suggestedName;
+            updateHostname(suggestedName);
+
+            // Set default port to 3000 for LinuxServer apps
+            if (githubUrl.includes('linuxserver')) {
+                document.getElementById('containerPort').value = '3000';
+            } else {
+                document.getElementById('containerPort').value = '8080';
+            }
+
+            // Show config card
+            document.getElementById('deployZone').classList.add('has-content');
+            document.getElementById('configCard').style.display = 'block';
+            document.getElementById('detectionBadge').style.display = 'flex';
+            document.getElementById('detectedType').textContent = 'GitHub Repository';
+            document.getElementById('detectedDesc').textContent = `Will auto-build from: ${githubUrl}`;
+
+            // Update currentType to indicate GitHub deployment
+            currentType = 'github-repo';
+
+            showAlert(`✅ Ready to deploy ${suggestedName}! Review settings and click Deploy.`, 'success', 8000);
+        }
+
+        async function deployFromGitHubRepo(githubUrl) {
+            showAlert('🔨 Building and deploying from GitHub...', 'info');
+
+            const btn = document.getElementById('deployBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Building & Deploying...';
+
+            // Extract repo name for suggested app name
+            const match = githubUrl.match(/github\.com\/[^\/]+\/([^\/]+?)(?:\.git|\/|$)/);
+            const suggestedName = match ? match[1].toLowerCase().replace(/^docker-/, '').replace(/_/g, '-') : '';
+
+            // Get config from form
+            const name = document.getElementById('appName').value.trim() || suggestedName;
+            const namespace = document.getElementById('namespace').value;
+            const gateway = getSelectedGateway('gateway');
+            const storageEnabled = document.getElementById('enableStorage').checked;
+
+            if (!name) {
+                showAlert('Please enter an application name', 'error');
+                btn.disabled = false;
+                btn.innerHTML = '&#128640; Deploy Application';
+                return;
+            }
+
+            try {
+                const config = {
+                    url: githubUrl,
+                    name,
+                    namespace,
+                    port: parseInt(document.getElementById('containerPort').value || 80),
+                    gateway,
+                    enable_istio: document.getElementById('enableIstio').checked,
+                    enable_storage: storageEnabled,
+                    storage_size: storageEnabled ? document.getElementById('storageSize').value : null,
+                    enable_keycloak: document.getElementById('enableKeycloak').checked,
+                    enable_minio: document.getElementById('enableMinio').checked
+                };
+
+                const response = await fetch(`${API_BASE}/api/deploy/github-auto`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(`✅ ${name} built and deployed successfully!`, 'success');
+                    if (data.url) {
+                        showAlert(`🌐 Access at: ${data.url}`, 'info', 15000);
+                    }
+                    if (data.images && data.images.length > 0) {
+                        const imageList = data.images.map(img => img.image).join(', ');
+                        showAlert(`📦 Built images: ${imageList}`, 'info', 15000);
+                    }
+                    currentGithubUrl = null;
+                    resetForm();
+                    showPage('apps', null);
+                    loadApplications();
+                } else {
+                    showAlert(`❌ Build/Deploy failed: ${data.error}`, 'error', 15000);
+                }
+            } catch (error) {
+                showAlert('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '&#128640; Deploy Application';
             }
         }
 
@@ -1894,6 +2123,14 @@
             const name = document.getElementById('appName').value.trim();
             const namespace = document.getElementById('namespace').value;
             if (!name) { showAlert('Please enter an application name', 'error'); return; }
+
+            // Check if this is a GitHub repo deployment
+            if (currentType === 'github-repo' && currentGithubUrl) {
+                await deployFromGitHubRepo(currentGithubUrl);
+                return;
+            }
+
+            // Regular deployment requires content
             if (!currentContent) { showAlert('Please upload or paste content first', 'error'); return; }
 
             const btn = document.getElementById('deployBtn');
